@@ -1,9 +1,17 @@
+use crossterm::{
+    event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    terminal::size,
+};
 use ropey::Rope;
+use std::{cmp::min, fs, path::PathBuf};
 
 /// One buffer represents one open file.
 pub struct Buffer {
+    // Contains the relative path of the file being displayed in this buffer.
+    file_path: PathBuf,
+
     // Contains the actual data in the buffer.
-    pub text: Rope,
+    text: Rope,
 
     // Represents the height and width in columns and rows of the area of the screen that
     // we're drawing `buffer` to.
@@ -24,17 +32,161 @@ pub struct Buffer {
 }
 
 impl Buffer {
-    pub fn from_string(string: String, width: usize, height: usize) -> Self {
-        let new_buffer = Buffer {
-            text: Rope::from(string),
+    /// Creates a buffer from a given file path.
+    /// Loads contents if the file exists and is readable.
+    /// Creates an empty buffer if the file does not exist.
+    /// Returns Err if the file exists but it can't be read.
+    pub fn from_path(path: PathBuf) -> std::io::Result<Self> {
+        // First, we read the text from the file. If the file can't be read, we simply return an
+        // error.
+        // Next, we iterate through the text and replace CRLF with just LF.
+
+        let (cols, rows) = size().unwrap();
+
+        let (contents, file_path) = match fs::read_to_string(&path) {
+            Ok(contents) => (contents, path),
+            // Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            //     (String::new(), PathBuf::new())
+            // }
+            Err(err) => return Err(err),
+        };
+
+        let mut rope: Rope = Rope::from_str(&contents);
+
+        let mut line_idx = 0;
+        while line_idx < rope.len_lines() {
+            let line = rope.line(line_idx);
+            let len = line.len_chars();
+            if len >= 2 {
+                let last_char = line.char(len - 2);
+                let newline_char = line.char(len - 1);
+                if last_char == '\r' && newline_char == '\n' {
+                    rope.remove(
+                        rope.line_to_char(line_idx) + len - 2
+                            ..rope.line_to_char(line_idx) + len - 1,
+                    );
+                }
+            }
+            line_idx += 1;
+        }
+
+        Ok(Buffer {
+            file_path: file_path,
+            text: rope,
+            visual_width: cols as usize,
+            visual_height: rows as usize,
             visual_origin_row: 0,
             visual_origin_col: 0,
             cursor_idx: 0,
-            visual_width: width,
-            visual_height: height,
-        };
+        })
+    }
 
-        new_buffer
+    /// Return a string for the editor to use as a status bar for this buffer.
+    pub fn get_status_bar_text(&self) -> String {
+        let mut text = String::from("Viewing file ");
+        let filename = self
+            .file_path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| "<unnamed>".to_string());
+        text.push_str(&filename);
+        return text;
+    }
+
+    /// Moves the cursor right by one character.
+    pub fn move_right(&mut self) {
+        if self.cursor_idx < self.len_chars() {
+            self.cursor_idx += 1;
+        }
+    }
+
+    /// Moves the cursor left by one character.
+    pub fn move_left(&mut self) {
+        if self.cursor_idx > 0 {
+            self.cursor_idx -= 1;
+        }
+    }
+
+    /// Moves the cursor up a line.
+    pub fn move_up(&mut self) {
+        let cursor_line = self.get_logical_cursor_line();
+        // If we're on the first line, go to the beginning of the line.
+        if cursor_line == 0 {
+            self.cursor_idx = 0;
+        } else {
+            let next_line_idx = cursor_line - 1;
+            let next_line_char_idx = self.text.line_to_char(next_line_idx);
+            let next_line_len = self.text.line(next_line_idx).len_chars();
+            if next_line_len <= 1 || self.get_logical_cursor_col() == 0 {
+                self.cursor_idx = next_line_char_idx;
+            } else {
+                self.cursor_idx =
+                    next_line_char_idx + min(next_line_len, self.get_logical_cursor_col());
+            }
+        }
+    }
+
+    /// Moves the cursor down a line.
+    pub fn move_down(&mut self) {
+        let cursor_line = self.get_logical_cursor_line();
+        // If we're on the last line, go the end of the line.
+        if cursor_line == self.text.len_lines() - 1 {
+            self.cursor_idx = self.text.len_chars();
+        } else {
+            let next_line_idx = cursor_line + 1;
+            let next_line_char_idx = self.text.line_to_char(next_line_idx);
+            let next_line_len = self.text.line(next_line_idx).len_chars();
+            if next_line_len <= 1 || self.get_logical_cursor_col() == 0 {
+                self.cursor_idx = next_line_char_idx;
+            } else {
+                self.cursor_idx =
+                    next_line_char_idx + min(next_line_len, self.get_logical_cursor_col());
+            }
+        }
+    }
+
+    pub fn handle_key_event(&mut self, key_event: KeyEvent) {
+        let (current_line_idx, _) = self.get_logical_cursor_pos();
+        if key_event.kind == KeyEventKind::Press {
+            match key_event.code {
+                KeyCode::Right => self.move_right(),
+                KeyCode::Left => {
+                    self.move_left();
+                }
+                KeyCode::Up => {
+                    self.move_up();
+                }
+                KeyCode::Down => {
+                    self.move_down();
+                }
+                KeyCode::Home => {
+                    if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                        self.cursor_idx = 0;
+                    } else {
+                        self.cursor_idx = self.line_to_char(current_line_idx);
+                    }
+                }
+                KeyCode::End => {
+                    if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                        self.cursor_idx = self.len_chars();
+                    } else {
+                        let current_line_len = self.get_line(current_line_idx).len();
+                        let current_line_char_idx = self.line_to_char(current_line_idx);
+                        self.cursor_idx =
+                            current_line_char_idx + current_line_len - min(current_line_len, 1);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Returns the logical line and column that the cursor is on. (line, column).
+    pub fn get_logical_cursor_pos(&self) -> (usize, usize) {
+        (
+            self.get_logical_cursor_line(),
+            self.get_logical_cursor_col(),
+        )
     }
 
     /// Gets the logical line that the cursor is on.
@@ -55,5 +207,29 @@ impl Buffer {
     /// Gets the row that the cursor should be shown at visually.
     pub fn get_visual_cursor_line(&self) -> usize {
         self.get_logical_cursor_line() - self.visual_origin_row
+    }
+
+    /// Get the number of lines in the buffer.
+    pub fn len_lines(&self) -> usize {
+        self.text.len_lines()
+    }
+
+    /// Get the character index of a given line.
+    pub fn line_to_char(&self, idx: usize) -> usize {
+        self.text.line_to_char(idx)
+    }
+
+    pub fn char_to_line(&self, idx: usize) -> usize {
+        self.text.char_to_line(idx)
+    }
+
+    /// Get the length of the buffer in chars.
+    pub fn len_chars(&self) -> usize {
+        self.text.len_chars()
+    }
+
+    /// Get the text of a line from the buffer as a string.
+    pub fn get_line(&self, idx: usize) -> String {
+        self.text.line(idx).to_string()
     }
 }

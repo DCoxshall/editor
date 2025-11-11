@@ -12,9 +12,8 @@ use crossterm::{
     },
 };
 
-use std::cmp::max;
+use std::{cmp::max, path::PathBuf};
 use std::env;
-use std::fs;
 use std::io::{Stdout, Write, stdout};
 use std::{io::Result, process::exit};
 
@@ -34,15 +33,15 @@ fn main() -> Result<()> {
     }
 
     let filename = args.get(1).unwrap();
-    let contents = match fs::read_to_string(filename) {
-        Ok(s) => s,
+    let path = PathBuf::from(filename);
+
+    let mut editor = match Editor::from_path(path) {
+        Ok(editor) => editor,
         Err(_) => {
             println!("Could not read file.");
             exit(1);
         }
     };
-
-    let mut editor = Editor::from_string(contents, filename.to_owned());
 
     let mut stdout = stdout();
 
