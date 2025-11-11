@@ -21,6 +21,7 @@ pub struct Editor {
 impl Editor {
     /// The string shown on an out-of-bounds line.
     const EMPTY_LINE_NOTATION: &str = "~";
+    const TAB_WIDTH: usize = 4;
 
     pub fn from_path(path: PathBuf) -> Result<Self, std::io::Error> {
         let buffer = match Buffer::from_path(path) {
@@ -52,6 +53,9 @@ impl Editor {
                     // Remove `n` characters from the front of the line, where `n` is
                     // buffer.visual_origin_col.
                     text = text.chars().skip(self.buffer.visual_origin_col).collect();
+
+                    // Replace tab characters with spaces when rendering.
+                    text = text.replace('\t', &" ".repeat(Editor::TAB_WIDTH));
                 } else {
                     text = Editor::EMPTY_LINE_NOTATION.to_owned();
                 }
@@ -122,7 +126,7 @@ impl Editor {
         execute!(stdout, SetBackgroundColor(White), SetForegroundColor(Black))?;
 
         let footer_bar = format!(
-            "Line: {}, Column: {}. Press Ctrl-D to quit.",
+            "Line: {}, Column: {}. Press Ctrl-D or F10 to quit.",
             self.buffer.get_logical_cursor_line(),
             self.buffer.get_logical_cursor_col()
         );
@@ -144,15 +148,24 @@ impl Editor {
 
     pub fn handle_key_event(&mut self, key_event: KeyEvent) -> bool {
         if key_event.kind == KeyEventKind::Press {
-            match key_event.code {
-                KeyCode::F(1) => return true,
-                KeyCode::Char('d') => {
-                    if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+
+            // Handle Ctrl-<X>
+            if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+                match key_event.code {
+                    KeyCode::Char('d') => {
                         return true;
                     }
+                    KeyCode::Char('s') => {
+                        self.buffer.save_file();
+                    }
+                    _ => self.buffer.handle_key_event(key_event),
                 }
-                _ => {
-                    self.buffer.handle_key_event(key_event);
+            } else {
+                match key_event.code {
+                    KeyCode::F(10) => return true,
+                    _ => {
+                        self.buffer.handle_key_event(key_event);
+                    }
                 }
             }
         }

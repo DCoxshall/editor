@@ -3,7 +3,9 @@ use crossterm::{
     terminal::size,
 };
 use ropey::Rope;
-use std::{cmp::min, fs, path::PathBuf};
+use std::{cmp::min, fs, io::Write, path::PathBuf};
+
+use crate::editor::Editor;
 
 /// One buffer represents one open file.
 pub struct Buffer {
@@ -45,9 +47,9 @@ impl Buffer {
 
         let (contents, file_path) = match fs::read_to_string(&path) {
             Ok(contents) => (contents, path),
-            // Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            //     (String::new(), PathBuf::new())
-            // }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                (String::new(), PathBuf::new())
+            }
             Err(err) => return Err(err),
         };
 
@@ -79,6 +81,14 @@ impl Buffer {
             visual_origin_col: 0,
             cursor_idx: 0,
         })
+    }
+
+    /// Save the current contents of the file.
+    pub fn save_file(&self) {
+        let mut output_file = fs::File::create(&self.file_path).unwrap();
+        output_file
+            .write_all(self.text.to_string().as_bytes())
+            .unwrap();
     }
 
     /// Return a string for the editor to use as a status bar for this buffer.
@@ -176,6 +186,30 @@ impl Buffer {
                             current_line_char_idx + current_line_len - min(current_line_len, 1);
                     }
                 }
+                KeyCode::Char(x) => {
+                    let mut buf = [0u8; 4];
+                    self.text.insert(self.cursor_idx, x.encode_utf8(&mut buf));
+                    self.cursor_idx += 1;
+                }
+                KeyCode::Enter => {
+                    self.text.insert(self.cursor_idx, "\n");
+                    self.cursor_idx += 1;
+                }
+                KeyCode::Backspace => {
+                    if self.cursor_idx != 0 {
+                        self.text.remove(self.cursor_idx - 1..self.cursor_idx);
+                        self.cursor_idx -= 1;
+                    }
+                }
+                KeyCode::Tab => {
+                    self.text.insert(self.cursor_idx, "\t");
+                    self.cursor_idx += 1;
+                }
+                KeyCode::Delete => {
+                    if self.cursor_idx != self.text.len_chars() {
+                        self.text.remove(self.cursor_idx..self.cursor_idx + 1);
+                    }
+                }
                 _ => {}
             }
         }
@@ -201,7 +235,13 @@ impl Buffer {
 
     /// Gets the column that the cursor should be shown at visually.
     pub fn get_visual_cursor_col(&self) -> usize {
-        self.get_logical_cursor_col() - self.visual_origin_col
+        // Remember - tabs count as one logical character but TAB_WIDTH visual characters.
+        let cursor_line = self.get_line(self.get_logical_cursor_line());
+        let up_to_cursor = &cursor_line[..self.get_logical_cursor_col()];
+        let tab_count = up_to_cursor.chars().filter(|&c| c == '\t').count();
+        self.get_logical_cursor_col() + (Editor::TAB_WIDTH * tab_count)
+            - self.visual_origin_col
+            - tab_count
     }
 
     /// Gets the row that the cursor should be shown at visually.
