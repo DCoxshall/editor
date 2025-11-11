@@ -4,6 +4,7 @@ use crossterm::{
 };
 use ropey::Rope;
 use std::{cmp::min, fs, io::Write, path::PathBuf};
+use encoding_rs::UTF_16LE;
 
 use crate::editor::Editor;
 
@@ -45,12 +46,23 @@ impl Buffer {
 
         let (cols, rows) = size().unwrap();
 
-        let (contents, file_path) = match fs::read_to_string(&path) {
-            Ok(contents) => (contents, path),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                (String::new(), PathBuf::new())
-            }
+        // Read raw bytes from the file
+        let bytes = match fs::read(&path) {
+            Ok(b) => b,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Vec::new(),
             Err(err) => return Err(err),
+        };
+
+        // Attempt UTF-8 first, then UTF-16 LE, then fallback lossily
+        let contents = if let Ok(s) = String::from_utf8(bytes.clone()) {
+            s
+        } else if bytes.len() >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE {
+            // UTF-16 LE BOM detected
+            let (cow, _, _) = UTF_16LE.decode(&bytes[2..]); // skip BOM
+            cow.into_owned()
+        } else {
+            // Fallback: replace invalid sequences
+            String::from_utf8_lossy(&bytes).into_owned()
         };
 
         let mut rope: Rope = Rope::from_str(&contents);
@@ -73,7 +85,7 @@ impl Buffer {
         }
 
         Ok(Buffer {
-            file_path: file_path,
+            file_path: path,
             text: rope,
             visual_width: cols as usize,
             visual_height: rows as usize,
