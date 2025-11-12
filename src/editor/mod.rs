@@ -3,12 +3,15 @@ mod buffer;
 use buffer::Buffer;
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
-    event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, read},
     execute,
     style::{Color::*, ResetColor, SetBackgroundColor, SetForegroundColor},
-    terminal::size,
+    terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode, size},
 };
-use std::io::{Stdout, Write};
+use std::{
+    cmp::max,
+    io::{Stdout, Write, stdout},
+};
 use std::{cmp::min, path::PathBuf};
 
 /// Main editor data structure.
@@ -16,6 +19,11 @@ pub struct Editor {
     /// Main text buffer. One buffer represents one open file. Currently a single editor contains
     /// only a single buffer.
     pub buffer: Buffer,
+
+    /// Text to be displayed in the footer.
+    pub footer_text: String,
+
+    stdout: Stdout,
 }
 
 impl Editor {
@@ -28,14 +36,20 @@ impl Editor {
             Ok(buf) => buf,
             Err(err) => return Err(err),
         };
-
-        return Ok(Editor { buffer: buffer });
+        let mut stdout = stdout();
+        enable_raw_mode()?;
+        execute!(stdout, EnterAlternateScreen)?;
+        return Ok(Editor {
+            buffer: buffer,
+            footer_text: String::from(""),
+            stdout,
+        });
     }
 
     /// Renders the entire editor to stdout. This is the only `render` function that should be
     /// called in `main.rs`.
-    pub fn render(&self, stdout: &mut Stdout) -> std::io::Result<()> {
-        execute!(stdout, Hide)?; // Hide the cursor while drawing.
+    pub fn render(&mut self) -> std::io::Result<()> {
+        execute!(self.stdout, Hide)?; // Hide the cursor while drawing.
 
         let (_, rows) = size().unwrap();
 
@@ -79,29 +93,29 @@ impl Editor {
                     text += &(" ".repeat(self.buffer.visual_width - text.chars().count()));
                 }
 
-                execute!(stdout, MoveTo(0, i as u16))?;
-                write!(stdout, "{}", text)?;
+                execute!(self.stdout, MoveTo(0, i as u16))?;
+                write!(self.stdout, "{}", text)?;
             }
         }
         if rows >= 2 {
-            self.render_status_bar(stdout)?;
+            self.render_status_bar()?;
         }
         if rows >= 1 {
-            self.render_footer_bar(stdout)?;
+            self.render_footer_bar()?;
         }
         execute!(
-            stdout,
+            self.stdout,
             MoveTo(
                 self.buffer.get_visual_cursor_col() as u16,
                 self.buffer.get_visual_cursor_line() as u16
             )
         )?;
-        execute!(stdout, Show)?; // Show the cursor again once we've finished drawing.
+        execute!(self.stdout, Show)?; // Show the cursor again once we've finished drawing.
 
         Ok(())
     }
 
-    fn render_status_bar(&self, stdout: &mut Stdout) -> std::io::Result<()> {
+    fn render_status_bar(&mut self) -> std::io::Result<()> {
         let (cols, rows) = size()?;
 
         // We only want to render the status bar if there are 2 or more rows being rendered to the
@@ -113,23 +127,23 @@ impl Editor {
         let text = self.buffer.get_status_bar_text();
         let blank_space = cols - min(text.len() as u16, cols);
 
-        execute!(stdout, MoveTo(0, rows - 2))?;
-        write!(stdout, "{}{}", text, " ".repeat(blank_space as usize))?;
+        execute!(self.stdout, MoveTo(0, rows - 2))?;
+        write!(self.stdout, "{}{}", text, " ".repeat(blank_space as usize))?;
         Ok(())
     }
 
     /// Draws the footer bar. The footer bar is a property of the entire editor rather than a single
     /// buffer.
-    fn render_footer_bar(&self, stdout: &mut Stdout) -> std::io::Result<()> {
+    fn render_footer_bar(&mut self) -> std::io::Result<()> {
         let (cols, rows) = size()?;
-        execute!(stdout, MoveTo(0, rows - 1))?;
-        execute!(stdout, SetBackgroundColor(White), SetForegroundColor(Black))?;
+        execute!(self.stdout, MoveTo(0, rows - 1))?;
+        execute!(
+            self.stdout,
+            SetBackgroundColor(White),
+            SetForegroundColor(Black)
+        )?;
 
-        let footer_bar = format!(
-            "Line: {}, Column: {}. Press Ctrl-D or F10 to quit.",
-            self.buffer.get_logical_cursor_line(),
-            self.buffer.get_logical_cursor_col()
-        );
+        let footer_bar = &self.footer_text;
 
         let message_len = min(footer_bar.len() as u16, cols);
 
@@ -137,18 +151,17 @@ impl Editor {
 
         let blank_space = cols - message_len;
         write!(
-            stdout,
+            self.stdout,
             "{}{}",
             footer_text,
             " ".repeat(blank_space as usize)
         )?;
-        execute!(stdout, ResetColor)?;
+        execute!(self.stdout, ResetColor)?;
         Ok(())
     }
 
     pub fn handle_key_event(&mut self, key_event: KeyEvent) -> bool {
         if key_event.kind == KeyEventKind::Press {
-
             // Handle Ctrl-<X>
             if key_event.modifiers.contains(KeyModifiers::CONTROL) {
                 match key_event.code {
@@ -210,5 +223,43 @@ impl Editor {
         if col_idx >= self.buffer.visual_origin_col + self.buffer.visual_width {
             self.buffer.visual_origin_col = col_idx - self.buffer.visual_width + 1;
         }
+    }
+
+    pub fn clear_terminal(&mut self) -> std::io::Result<()> {
+        execute!(self.stdout, Clear(ClearType::All))?;
+        execute!(self.stdout, MoveTo(0, 0))?;
+        self.stdout.flush()?;
+        Ok(())
+    }
+
+    pub fn mainloop(&mut self) -> std::io::Result<()> {
+        loop {
+            self.render()?;
+            self.stdout.flush()?;
+            match read() {
+                Ok(Event::Key(key_event)) => {
+                    let quit = self.handle_key_event(key_event);
+                    if quit {
+                        break;
+                    }
+                }
+                Ok(Event::Resize(w, h)) => {
+                    self.buffer.visual_width = w as usize;
+                    self.buffer.visual_height = max(h, 0) as usize;
+                }
+                Err(err) => {
+                    return Err(err);
+                }
+                _ => {}
+            }
+
+            // After every input event, we need to ensure that the cursor remains on screen.
+            self.align_cursor();
+        }
+
+        disable_raw_mode()?;
+        execute!(self.stdout, LeaveAlternateScreen, Show)?;
+
+        return Ok(());
     }
 }
