@@ -6,7 +6,10 @@ use crossterm::{
     event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, read},
     execute,
     style::{Color::*, ResetColor, SetBackgroundColor, SetForegroundColor},
-    terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode, size},
+    terminal::{
+        Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
+        enable_raw_mode, size,
+    },
 };
 use std::{
     cmp::max,
@@ -169,13 +172,32 @@ impl Editor {
                         return true;
                     }
                     KeyCode::Char('s') => {
-                        self.buffer.save_file();
+                        if self.buffer.file_path.as_os_str().is_empty() {
+                            let new_filename = self.editor_prompt("Enter new filename> ");
+                            match new_filename {
+                                Some(name) => {
+                                    self.buffer.file_path.push(&name);
+                                    self.buffer.save_file();
+                                    self.footer_text = format!("New file saved as {}", &name);
+                                }
+                                None => self.footer_text = String::from("Cancelled save."),
+                            }
+                        }
                     }
                     _ => self.buffer.handle_key_event(key_event),
                 }
             } else {
                 match key_event.code {
                     KeyCode::F(10) => return true,
+                    // KeyCode::F(1) => {
+                    //     let user_text = self.editor_prompt("> ");
+                    //     match user_text {
+                    //         Some(text) => {
+                    //             self.footer_text = format!("You entered a command: {}", text)
+                    //         }
+                    //         None => {}
+                    //     }
+                    // }
                     _ => {
                         self.buffer.handle_key_event(key_event);
                     }
@@ -230,6 +252,45 @@ impl Editor {
         execute!(self.stdout, MoveTo(0, 0))?;
         self.stdout.flush()?;
         Ok(())
+    }
+
+    /// Prompt the user for some input, and return that input as a string. The prompt will appear in
+    /// the footer bar, a la Vim.
+    pub fn editor_prompt(&mut self, prompt_text: &str) -> Option<String> {
+        self.footer_text = prompt_text.to_owned();
+        let mut user_input = String::new();
+
+        loop {
+            self.footer_text = format!("{}{}", prompt_text, user_input);
+            self.render().ok();
+            let _ = execute!(self.stdout, MoveTo(0, self.footer_text.len() as u16));
+            let _ = self.stdout.flush();
+
+            match read() {
+                Ok(Event::Key(key_event)) if key_event.kind == KeyEventKind::Press => {
+                    match key_event.code {
+                        KeyCode::Char(x) => {
+                            user_input.push(x);
+                        }
+                        KeyCode::Backspace => {
+                            user_input.pop();
+                        }
+                        KeyCode::Enter => {
+                            self.footer_text.clear();
+                            return Some(user_input);
+                        }
+                        KeyCode::Esc => {
+                            self.footer_text.clear();
+                            return None;
+                        }
+                        _ => {}
+                    }
+                }
+
+                Err(_) => return None,
+                _ => {}
+            }
+        }
     }
 
     pub fn mainloop(&mut self) -> std::io::Result<()> {

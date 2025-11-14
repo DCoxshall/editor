@@ -11,7 +11,7 @@ use crate::editor::Editor;
 /// One buffer represents one open file.
 pub struct Buffer {
     // Contains the relative path of the file being displayed in this buffer.
-    file_path: PathBuf,
+    pub file_path: PathBuf,
 
     // Contains the actual data in the buffer.
     text: Rope,
@@ -249,7 +249,7 @@ impl Buffer {
     pub fn get_visual_cursor_col(&self) -> usize {
         // Remember - tabs count as one logical character but TAB_WIDTH visual characters.
         let cursor_line = self.get_line(self.get_logical_cursor_line());
-        let up_to_cursor = &cursor_line[..self.get_logical_cursor_col()];
+        let up_to_cursor: String = cursor_line.chars().take(self.get_logical_cursor_col()).collect();
         let tab_count = up_to_cursor.chars().filter(|&c| c == '\t').count();
         self.get_logical_cursor_col() + (Editor::TAB_WIDTH * tab_count)
             - self.visual_origin_col
