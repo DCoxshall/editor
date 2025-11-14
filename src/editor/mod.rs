@@ -163,26 +163,61 @@ impl Editor {
         Ok(())
     }
 
+    fn save_buffer(&mut self) {
+        // If the buffer does not have a file path, prompt the user for one.
+        if self.buffer.file_path.as_os_str().is_empty() {
+            let new_filename = self.editor_prompt("Enter new filename> ");
+            match new_filename {
+                Some(name) => {
+                    self.buffer.file_path.push(&name);
+                    match self.buffer.save_file() {
+                        Ok(()) => self.footer_text = format!("New file saved as {}", &name),
+                        Err(_) => self.footer_text = format!("File save failed. Please try again."),
+                    }
+                }
+                None => self.footer_text = String::from("No file name given, cancelled save."),
+            }
+        } else {
+            match self.buffer.save_file() {
+                Ok(_) => self.footer_text = format!("File saved."),
+                Err(_) => self.footer_text = format!("File save failed. Please try again."),
+            }
+        }
+    }
+
+    /// If the buffer is dirty, we need to ask the user whether they really meant to exit without
+    /// saving. Otherwise, just exit.
+    fn attempt_exit(&mut self) -> bool {
+        if self.buffer.dirty_buffer {
+            let response = self.editor_prompt("The buffer is unsaved. Do you really want to exit? (y/n): ");
+            match response {
+                Some(str ) => {
+                    if str == "y" || str == "Y" || str == "yes" {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                }
+                None => {
+                    return false;
+                }
+            }
+        } else {
+            return true;
+        }
+    }
+
+    /// Returns true if the user wants to quit, false otherwise.
     pub fn handle_key_event(&mut self, key_event: KeyEvent) -> bool {
         if key_event.kind == KeyEventKind::Press {
             // Handle Ctrl-<X>
             if key_event.modifiers.contains(KeyModifiers::CONTROL) {
                 match key_event.code {
                     KeyCode::Char('d') => {
-                        return true;
+                        return self.attempt_exit();
                     }
                     KeyCode::Char('s') => {
-                        if self.buffer.file_path.as_os_str().is_empty() {
-                            let new_filename = self.editor_prompt("Enter new filename> ");
-                            match new_filename {
-                                Some(name) => {
-                                    self.buffer.file_path.push(&name);
-                                    self.buffer.save_file();
-                                    self.footer_text = format!("New file saved as {}", &name);
-                                }
-                                None => self.footer_text = String::from("Cancelled save."),
-                            }
-                        }
+                        self.save_buffer();
                     }
                     _ => self.buffer.handle_key_event(key_event),
                 }

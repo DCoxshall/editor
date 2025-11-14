@@ -2,9 +2,9 @@ use crossterm::{
     event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     terminal::size,
 };
+use encoding_rs::UTF_16LE;
 use ropey::Rope;
 use std::{cmp::min, fs, io::Write, path::PathBuf};
-use encoding_rs::UTF_16LE;
 
 use crate::editor::Editor;
 
@@ -32,6 +32,9 @@ pub struct Buffer {
     /// Due to how we handle resize events and cursor movement, the cursor is guranteed to always be
     /// inside the viewport.
     pub cursor_idx: usize,
+
+    /// Represents whether a change has been made since the file was last saved.
+    pub dirty_buffer: bool,
 }
 
 impl Buffer {
@@ -92,15 +95,19 @@ impl Buffer {
             visual_origin_row: 0,
             visual_origin_col: 0,
             cursor_idx: 0,
+            dirty_buffer: false,
         })
     }
 
     /// Save the current contents of the file.
-    pub fn save_file(&self) {
+    pub fn save_file(&mut self) -> std::io::Result<()> {
         let mut output_file = fs::File::create(&self.file_path).unwrap();
-        output_file
-            .write_all(self.text.to_string().as_bytes())
-            .unwrap();
+        let save_result = output_file.write_all(self.text.to_string().as_bytes());
+        match save_result {
+            Ok(_) => self.dirty_buffer = false,
+            Err(_) => {},
+        }
+        return save_result;
     }
 
     /// Return a string for the editor to use as a status bar for this buffer.
@@ -202,24 +209,29 @@ impl Buffer {
                     let mut buf = [0u8; 4];
                     self.text.insert(self.cursor_idx, x.encode_utf8(&mut buf));
                     self.cursor_idx += 1;
+                    self.dirty_buffer = true;
                 }
                 KeyCode::Enter => {
                     self.text.insert(self.cursor_idx, "\n");
                     self.cursor_idx += 1;
+                    self.dirty_buffer = true;
                 }
                 KeyCode::Backspace => {
                     if self.cursor_idx != 0 {
                         self.text.remove(self.cursor_idx - 1..self.cursor_idx);
                         self.cursor_idx -= 1;
+                        self.dirty_buffer = true;
                     }
                 }
                 KeyCode::Tab => {
                     self.text.insert(self.cursor_idx, "\t");
                     self.cursor_idx += 1;
+                    self.dirty_buffer = true;
                 }
                 KeyCode::Delete => {
                     if self.cursor_idx != self.text.len_chars() {
                         self.text.remove(self.cursor_idx..self.cursor_idx + 1);
+                        self.dirty_buffer = true;
                     }
                 }
                 _ => {}
@@ -249,7 +261,10 @@ impl Buffer {
     pub fn get_visual_cursor_col(&self) -> usize {
         // Remember - tabs count as one logical character but TAB_WIDTH visual characters.
         let cursor_line = self.get_line(self.get_logical_cursor_line());
-        let up_to_cursor: String = cursor_line.chars().take(self.get_logical_cursor_col()).collect();
+        let up_to_cursor: String = cursor_line
+            .chars()
+            .take(self.get_logical_cursor_col())
+            .collect();
         let tab_count = up_to_cursor.chars().filter(|&c| c == '\t').count();
         self.get_logical_cursor_col() + (Editor::TAB_WIDTH * tab_count)
             - self.visual_origin_col
