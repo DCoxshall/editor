@@ -11,6 +11,7 @@ use crossterm::{
         enable_raw_mode, size,
     },
 };
+use unicode_width::UnicodeWidthStr;
 use std::{
     cmp::max,
     io::{Stdout, Write, stdout},
@@ -93,7 +94,7 @@ impl Editor {
 
                 // If the resulting string is shorter than the width of the display, pad it.
                 if text.chars().count() < self.buffer.visual_width {
-                    text += &(" ".repeat(self.buffer.visual_width - text.chars().count()));
+                    text += &(" ".repeat(self.buffer.visual_width - text.width_cjk()));
                 }
 
                 execute!(self.stdout, MoveTo(0, i as u16))?;

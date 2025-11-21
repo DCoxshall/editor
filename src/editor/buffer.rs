@@ -4,7 +4,11 @@ use crossterm::{
 };
 use encoding_rs::UTF_16LE;
 use ropey::Rope;
+use unicode_segmentation::UnicodeSegmentation;
 use std::{cmp::min, fs, io::Write, path::PathBuf};
+
+use unicode_width::UnicodeWidthStr;
+
 
 use crate::editor::Editor;
 
@@ -199,10 +203,10 @@ impl Buffer {
                     if key_event.modifiers.contains(KeyModifiers::CONTROL) {
                         self.cursor_idx = self.len_chars();
                     } else {
-                        let current_line_len = self.get_line(current_line_idx).len();
+                        let current_line_len = self.get_line(current_line_idx).graphemes(true).count();
                         let current_line_char_idx = self.line_to_char(current_line_idx);
                         self.cursor_idx =
-                            current_line_char_idx + current_line_len - min(current_line_len, 1);
+                            current_line_char_idx + current_line_len;
                     }
                 }
                 KeyCode::Char(x) => {
@@ -266,7 +270,8 @@ impl Buffer {
             .take(self.get_logical_cursor_col())
             .collect();
         let tab_count = up_to_cursor.chars().filter(|&c| c == '\t').count();
-        self.get_logical_cursor_col() + (Editor::TAB_WIDTH * tab_count)
+        let upto_count = up_to_cursor.width_cjk();
+        upto_count + (Editor::TAB_WIDTH * tab_count)
             - self.visual_origin_col
             - tab_count
     }
