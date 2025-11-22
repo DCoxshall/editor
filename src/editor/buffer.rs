@@ -4,11 +4,10 @@ use crossterm::{
 };
 use encoding_rs::UTF_16LE;
 use ropey::Rope;
-use unicode_segmentation::UnicodeSegmentation;
 use std::{cmp::min, fs, io::Write, path::PathBuf};
+use unicode_segmentation::UnicodeSegmentation;
 
 use unicode_width::UnicodeWidthStr;
-
 
 use crate::editor::Editor;
 
@@ -20,8 +19,8 @@ pub struct Buffer {
     // Contains the actual data in the buffer.
     text: Rope,
 
-    // Represents the height and width in columns and rows of the area of the screen that
-    // we're drawing `buffer` to.
+    // Represents the height and width in columns and rows of the area of the screen that we're
+    // drawing `buffer` to.
     pub visual_width: usize,
     pub visual_height: usize,
 
@@ -32,9 +31,8 @@ pub struct Buffer {
     pub visual_origin_col: usize,
 
     /// Represents where in `text` the cursor is. Cursor location is a property of the buffer and
-    /// not the editor. Measured in chars, not bytes.
-    /// Due to how we handle resize events and cursor movement, the cursor is guranteed to always be
-    /// inside the viewport.
+    /// not the editor. Measured in chars, not bytes. Due to how we handle resize events and cursor
+    /// movement, the cursor is guranteed to always be inside the viewport.
     pub cursor_idx: usize,
 
     /// Represents whether a change has been made since the file was last saved.
@@ -42,14 +40,12 @@ pub struct Buffer {
 }
 
 impl Buffer {
-    /// Creates a buffer from a given file path.
-    /// Loads contents if the file exists and is readable.
-    /// Creates an empty buffer if the file does not exist.
-    /// Returns Err if the file exists but it can't be read.
+    /// Creates a buffer from a given file path. Loads contents if the file exists and is readable.
+    /// Creates an empty buffer if the file does not exist. Returns Err if the file exists but it
+    /// can't be read.
     pub fn from_path(path: PathBuf) -> std::io::Result<Self> {
         // First, we read the text from the file. If the file can't be read, we simply return an
-        // error.
-        // Next, we iterate through the text and replace CRLF with just LF.
+        // error. Next, we iterate through the text and replace CRLF with just LF.
 
         let (cols, rows) = size().unwrap();
 
@@ -105,13 +101,45 @@ impl Buffer {
         })
     }
 
+    /// Finds the next instance of `target` in the buffer and puts the cursor at the start. If
+    /// found, returns true, otherwise returns false.
+    pub fn go_to_next_instance(&mut self, target: &String) -> bool {
+        for (line_idx, line) in self.text.lines().enumerate() {
+            if self.text.line_to_char(line_idx) < self.cursor_idx {
+                continue;
+            }
+
+            let line_str = line.to_string();
+            let res = line_str.find(target);
+            match res {
+                Some(target_byte_idx) => {
+                    let cursor_byte_idx = self.text.char_to_byte(self.cursor_idx);
+                    let line_byte_idx = self.text.line_to_byte(line_idx);
+                    
+                    // Don't match anything before the cursor.
+                    if target_byte_idx + line_byte_idx <= cursor_byte_idx {
+                        continue;
+                    } else {
+                        self.cursor_idx = target_byte_idx + line_byte_idx;
+                        return true;
+                    }
+                },
+                None => {
+                    continue;
+                }
+            }
+        }
+        
+        false
+    }
+
     /// Save the current contents of the file.
     pub fn save_file(&mut self) -> std::io::Result<()> {
         let mut output_file = fs::File::create(&self.file_path).unwrap();
         let save_result = output_file.write_all(self.text.to_string().as_bytes());
         match save_result {
             Ok(_) => self.dirty_buffer = false,
-            Err(_) => {},
+            Err(_) => {}
         }
         return save_result;
     }
@@ -211,11 +239,10 @@ impl Buffer {
                         match current_line.chars().last() {
                             Some('\n') => current_line_len -= 1,
                             _ => (),
-                        } 
+                        }
 
                         let current_line_char_idx = self.line_to_char(current_line_idx);
-                        self.cursor_idx =
-                            current_line_char_idx + current_line_len;
+                        self.cursor_idx = current_line_char_idx + current_line_len;
                     }
                 }
                 KeyCode::Char(x) => {
@@ -280,9 +307,7 @@ impl Buffer {
             .collect();
         let tab_count = up_to_cursor.chars().filter(|&c| c == '\t').count();
         let upto_count = up_to_cursor.width_cjk();
-        upto_count + (Editor::TAB_WIDTH * tab_count)
-            - self.visual_origin_col
-            - tab_count
+        upto_count + (Editor::TAB_WIDTH * tab_count) - self.visual_origin_col - tab_count
     }
 
     /// Gets the row that the cursor should be shown at visually.

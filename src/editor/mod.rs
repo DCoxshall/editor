@@ -11,12 +11,12 @@ use crossterm::{
         enable_raw_mode, size,
     },
 };
-use unicode_width::UnicodeWidthStr;
 use std::{
     cmp::max,
     io::{Stdout, Write, stdout},
 };
 use std::{cmp::min, path::PathBuf};
+use unicode_width::UnicodeWidthStr;
 
 /// Main editor data structure.
 pub struct Editor {
@@ -190,9 +190,10 @@ impl Editor {
     /// saving. Otherwise, just exit.
     fn attempt_exit(&mut self) -> bool {
         if self.buffer.dirty_buffer {
-            let response = self.editor_prompt("The buffer is unsaved. Do you really want to exit? (y/n): ");
+            let response =
+                self.editor_prompt("The buffer is unsaved. Do you really want to exit? (y/n): ");
             match response {
-                Some(str ) => {
+                Some(str) => {
                     if str == "y" || str == "Y" || str == "yes" {
                         return true;
                     } else {
@@ -219,6 +220,41 @@ impl Editor {
                     }
                     KeyCode::Char('s') => {
                         self.save_buffer();
+                    }
+                    KeyCode::Char('f') => {
+                        let target = match self.editor_prompt("Enter target text> ") {
+                            Some(text) => text,
+                            None => {
+                                self.footer_text = String::from("Search cancelled.");
+                                return false;
+                            }
+                        };
+
+                        let found = self.buffer.go_to_next_instance(&target);
+
+                        if !found {
+                            let user_response =
+                                match self.editor_prompt("No match found. Search from top? y/n> ") {
+                                    Some(text) => text,
+                                    None => {
+                                        self.footer_text = String::from("Search cancelled.");
+                                        return false;
+                                    }
+                                };
+                            if user_response == "y" {
+                                let past_cursor_idx = self.buffer.cursor_idx;
+                                self.buffer.cursor_idx = 0;
+                                let found = self.buffer.go_to_next_instance(&target);
+                                if !found {
+                                    self.buffer.cursor_idx = past_cursor_idx;
+                                    self.footer_text = String::from("No match found.");
+                                } else {
+                                    self.footer_text = String::from("Match found.");
+                                }
+                            }
+                        } else {
+                            self.footer_text = String::from("Match found.");
+                        }
                     }
                     _ => self.buffer.handle_key_event(key_event),
                 }
@@ -296,10 +332,12 @@ impl Editor {
         self.footer_text = prompt_text.to_owned();
         let mut user_input = String::new();
 
+        let (cols, _) = size().unwrap();
+
         loop {
             self.footer_text = format!("{}{}", prompt_text, user_input);
             self.render().ok();
-            let _ = execute!(self.stdout, MoveTo(0, self.footer_text.len() as u16));
+            let _ = execute!(self.stdout, MoveTo(self.footer_text.len() as u16, cols - 1));
             let _ = self.stdout.flush();
 
             match read() {
@@ -322,7 +360,6 @@ impl Editor {
                         _ => {}
                     }
                 }
-
                 Err(_) => return None,
                 _ => {}
             }
