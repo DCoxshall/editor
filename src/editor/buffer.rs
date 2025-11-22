@@ -72,8 +72,10 @@ impl Buffer {
             String::from_utf8_lossy(&bytes).into_owned()
         };
 
+        // Create the rope data structure from the string we've just read.
         let mut rope: Rope = Rope::from_str(&contents);
 
+        // Go through this new rope and carriage returns from each line, if they're there.
         let mut line_idx = 0;
         while line_idx < rope.len_lines() {
             let line = rope.line(line_idx);
@@ -203,7 +205,14 @@ impl Buffer {
                     if key_event.modifiers.contains(KeyModifiers::CONTROL) {
                         self.cursor_idx = self.len_chars();
                     } else {
-                        let current_line_len = self.get_line(current_line_idx).graphemes(true).count();
+                        let current_line = self.get_line(current_line_idx);
+                        let mut current_line_len = current_line.graphemes(true).count();
+
+                        match current_line.chars().last() {
+                            Some('\n') => current_line_len -= 1,
+                            _ => (),
+                        } 
+
                         let current_line_char_idx = self.line_to_char(current_line_idx);
                         self.cursor_idx =
                             current_line_char_idx + current_line_len;
