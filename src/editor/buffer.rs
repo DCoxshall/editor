@@ -179,12 +179,12 @@ impl Buffer {
         } else {
             let next_line_idx = cursor_line - 1;
             let next_line_char_idx = self.text.line_to_char(next_line_idx);
-            let next_line_len = self.text.line(next_line_idx).len_chars();
+            let next_line_len = self.text.line(next_line_idx).to_string().width_cjk();
             if next_line_len <= 1 || self.get_logical_cursor_col() == 0 {
                 self.cursor_idx = next_line_char_idx;
             } else {
                 self.cursor_idx =
-                    next_line_char_idx + min(next_line_len, self.get_logical_cursor_col());
+                    next_line_char_idx + min(next_line_len - 1, self.get_logical_cursor_col());
             }
         }
     }
