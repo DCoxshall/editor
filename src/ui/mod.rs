@@ -1,5 +1,9 @@
 pub mod visual_box;
 
+use crossterm::style::Attributes;
+use crossterm::style::ContentStyle;
+use crossterm::style::Color;
+
 use crate::editor::Mode;
 use crate::ui::visual_box::VisualBox;
 use crate::{editor::Editor, terminal::Terminal};
@@ -90,7 +94,19 @@ fn render_view_status_bar(view: &View, term: &mut Terminal, x: usize, y: usize, 
 
     let mut status_bar_vb = VisualBox::new(width, 1);
 
-    status_bar_vb.draw(0, 0, view.file_path.to_str().unwrap());
+    let mut status_bar_text = String::new();
+    status_bar_text.push_str(view.file_path.to_str().unwrap());
+    status_bar_text.push_str(&" ".repeat(width - status_bar_text.len()));
+    
+    let status_bar_style = ContentStyle {
+        foreground_color: Some(Color::Black),
+        background_color: Some(Color::White),
+        underline_color: None,
+        attributes: Attributes::default(),
+    };
+
+    status_bar_vb.draw_with_style(0, 0, &status_bar_text, status_bar_style);
+    
     term.draw_visual_box(x, y, status_bar_vb);
 }
 

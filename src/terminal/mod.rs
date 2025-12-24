@@ -2,11 +2,12 @@ use crossterm::{
     cursor::{self, Hide, Show},
     event::{self, Event},
     execute, queue,
+    style::{ContentStyle, ResetColor, SetStyle},
     terminal::{self, ClearType, disable_raw_mode},
 };
 use std::io::{Stdout, Write, stdout};
 
-use crate::ui::visual_box::VisualBox;
+use crate::ui::visual_box::{StyledCell, Cell::*, VisualBox};
 
 pub struct Terminal {
     stdout: Stdout,
@@ -46,22 +47,34 @@ impl Terminal {
 
     /// Compiles and draws a visual box on screen at the given (x, y) coordinates.
     pub fn draw_visual_box(&mut self, x: usize, y: usize, visual_box: VisualBox) {
-        let vb_text = visual_box.compile();
-        let mut j = y;
-        for line in vb_text.lines() {
-            self.draw_line(x, j, line);
-            j += 1;
+        for dx in 0..visual_box.width {
+            for dy in 0..visual_box.height {
+                self.draw_cell(x + dx, y + dy, visual_box.at(dx, dy));
+            }
         }
     }
 
     /// Draws a line on the terminal window at a given (x, y) coordinate.
-    fn draw_line(&mut self, x: usize, y: usize, text: &str) {
+    fn draw_cell(&mut self, x: usize, y: usize, styled_cell: &StyledCell) {
+        let text = match &styled_cell.cell {
+            Empty => " ",
+            Grapheme(g) => g,
+            Continuation => "",
+        };
         queue!(
             self.stdout,
             cursor::MoveTo(x as u16, y as u16),
+            SetStyle(styled_cell.style),
             crossterm::style::Print(text)
         )
         .unwrap();
+    }
+
+    fn set_style(&mut self, style: Option<ContentStyle>) {
+        match style {
+            Some(s) => queue!(self.stdout, SetStyle(s)).unwrap(),
+            None => queue!(self.stdout, ResetColor).unwrap(),
+        }
     }
 
     pub fn flush(&mut self) {

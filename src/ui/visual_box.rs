@@ -1,17 +1,33 @@
+use crossterm::style::Color;
+use crossterm::style::{Attributes, ContentStyle};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone)]
-enum Cell {
+pub enum Cell {
     Empty,            // width 1
     Grapheme(String), // may be width 1 or 2
     Continuation,     // marks the second cell of a wide char
+}
+#[derive(Clone)]
+pub struct StyledCell {
+    pub cell: Cell,
+    pub style: ContentStyle,
 }
 
 pub struct VisualBox {
     pub width: usize,
     pub height: usize,
-    cells: Vec<Cell>,
+    cells: Vec<StyledCell>,
+}
+
+fn reset_style() -> ContentStyle {
+    ContentStyle {
+        foreground_color: Some(Color::Reset),
+        background_color: Some(Color::Reset),
+        underline_color: Some(Color::Reset),
+        attributes: Attributes::none(),
+    }
 }
 
 impl VisualBox {
@@ -19,7 +35,7 @@ impl VisualBox {
         Self {
             width,
             height,
-            cells: vec![Cell::Empty; (width * height) as usize],
+            cells: vec![StyledCell { cell: Cell::Empty, style: reset_style() }; (width * height) as usize],
         }
     }
 
@@ -29,32 +45,24 @@ impl VisualBox {
         y * self.width + x
     }
 
-    pub fn compile(&self) -> String {
-        let mut out = String::new();
-
-        for y in 0..self.height {
-            for x in 0..self.width {
-                match &self.cells[self.index(x, y) as usize] {
-                    Cell::Empty => out.push(' '),
-                    Cell::Grapheme(g) => out.push_str(g),
-                    Cell::Continuation => {} // skip wide-char continuation
-                }
-            }
-            out.push('\n');
-        }
-
-        out
+    pub fn at(&self, x: usize, y: usize) -> &StyledCell {
+        let idx = self.index(x, y);
+        &self.cells[idx]
     }
 
-    pub fn draw(&mut self, mut x: usize, y: usize, text: &str) {
+    pub fn draw(&mut self, x: usize, y: usize, text: &str) {
+        self.draw_with_style(x, y, text, reset_style());
+    }
+
+    pub fn draw_with_style(&mut self, mut x: usize, y: usize, text: &str, style: ContentStyle) {
         if y >= self.height || x >= self.width {
             return;
         }
 
-        let real_text = match text {
-            "\n" => " ",
-            _ => text.trim_end(),
-        };
+        let mut real_text = text.to_owned();
+        if real_text.ends_with('\n') {
+            real_text.pop();
+        }
 
         for grapheme in real_text.graphemes(true) {
             let width = UnicodeWidthStr::width(grapheme);
@@ -63,7 +71,7 @@ impl VisualBox {
             if width == 0 {
                 if x > 0 {
                     let i = self.index(x - 1, y);
-                    if let Cell::Grapheme(g) = &mut self.cells[i as usize] {
+                    if let Cell::Grapheme(g) = &mut self.cells[i].cell {
                         g.push_str(grapheme);
                     }
                 }
@@ -77,9 +85,11 @@ impl VisualBox {
 
             // Write the grapheme to self.cells.
             let i = self.index(x, y);
-            self.cells[i as usize] = Cell::Grapheme(grapheme.to_string());
+            self.cells[i].cell = Cell::Grapheme(grapheme.to_string());
+            self.cells[i].style = style;
             for dx in 1..width {
-                self.cells[(i + dx) as usize] = Cell::Continuation;
+                self.cells[i + dx].cell = Cell::Continuation;
+                self.cells[i + dx].style = style;
             }
 
             x += width;
