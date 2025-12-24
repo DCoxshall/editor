@@ -1,37 +1,41 @@
 mod editor;
+mod terminal;
+mod ui;
 
 use editor::Editor;
+use terminal::Terminal;
 
 use std::env;
+use std::io::Result;
 use std::path::PathBuf;
-use std::{io::Result, process::exit};
+use std::str::FromStr;
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() > 2 {
-        println!("Usage: editor [filename]");
-        exit(1);
+    let mut paths: Vec<PathBuf> = Vec::new();
+
+    for i in 1..args.len() {
+        let filename = args.get(i);
+        match filename {
+            // unwrap justified because PathBuf::from_str is Infallible.
+            Some(s) => paths.push(PathBuf::from_str(s).unwrap()),
+            None => {}
+        }
     }
 
-    let filename = match args.get(1) {
-        Some(str) => str.to_owned(),
-        None => String::from(""),
-    };
+    let mut editor = Editor::from_paths(paths);
+    let mut terminal = Terminal::new()?;
 
-    let path = PathBuf::from(filename);
+    loop {
+        ui::render(&editor, &mut terminal);
+        let event = terminal.read_event()?;
+        editor.handle_input(event);
 
-    let mut editor = match Editor::from_path(path) {
-        Ok(editor) => editor,
-        Err(_) => {
-            println!("Could not read file.");
-            exit(1);
+        if editor.quit {
+            break;
         }
-    };
-
-    editor.mainloop()?;
-
-    editor.clear_terminal()?;
+    }
 
     Ok(())
 }
