@@ -63,6 +63,9 @@ impl VisualBox {
         if real_text.ends_with('\n') {
             real_text.pop();
         }
+        if real_text.ends_with('\r') {
+            real_text.pop();
+        }
 
         for grapheme in real_text.graphemes(true) {
             let width = UnicodeWidthStr::width(grapheme);
