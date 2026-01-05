@@ -127,7 +127,7 @@ fn render_view_status_bar(
 
     let focused_view_ref = editor.get_current_tab().get_current_focused_view();
 
-    let is_focused = focused_view_ref == view;
+    let is_focused = std::ptr::eq(focused_view_ref, view);
 
     let status_bar_style = match is_focused {
         true => ContentStyle {
