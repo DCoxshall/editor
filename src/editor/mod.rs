@@ -102,7 +102,7 @@ impl Editor {
     }
 
     fn handle_keystroke(&mut self, key_event: KeyEvent) {
-        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
+        if key_event.modifiers.contains(KeyModifiers::ALT) {
             match key_event.code {
                 KeyCode::Char('d') => {
                     self.quit = true;
