@@ -1,6 +1,7 @@
 use ropey::Rope;
 
 /// Buffer acts as a wrapper around Ropey::rope. It's only job is to hold and manipulate text.
+#[derive(Clone, PartialEq)]
 pub struct Buffer {
     pub text: Rope,
     cursor_idx: usize,

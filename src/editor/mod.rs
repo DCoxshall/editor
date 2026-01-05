@@ -86,12 +86,12 @@ impl Editor {
     fn run_user_command(&mut self) {
         if self.command_input == String::from("quit") {
             self.quit = true;
-        } else if let Some(filename) = self.command_input.strip_prefix("vsplit") {
+        } else if let Some(filename) = self.command_input.strip_prefix("hsplit") {
             let filename = filename.trim_start();
             let pathbuf = PathBuf::from(filename);
             let view = View::from_path(pathbuf).unwrap();
             self.get_current_tab_mut().insert_new_view(view, tab::Axis::Horizontal);
-        } else if let Some(filename) = self.command_input.strip_prefix("hsplit") {
+        } else if let Some(filename) = self.command_input.strip_prefix("vsplit") {
             let filename = filename.trim_start();
             let pathbuf = PathBuf::from(filename);
             let view = View::from_path(pathbuf).unwrap();
@@ -144,6 +144,10 @@ impl Editor {
                     if self.mode == Mode::Command {
                         self.command_input.push(c);
                     }
+                }
+
+                KeyCode::Right => {
+                    self.get_current_tab_mut().move_focus_right();
                 }
 
                 _ => {}

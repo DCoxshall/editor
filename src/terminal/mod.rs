@@ -2,12 +2,12 @@ use crossterm::{
     cursor::{self, Hide, Show},
     event::{self, Event},
     execute, queue,
-    style::{ContentStyle, ResetColor, SetStyle},
+    style::SetStyle,
     terminal::{self, ClearType, disable_raw_mode},
 };
 use std::io::{Stdout, Write, stdout};
 
-use crate::ui::visual_box::{StyledCell, Cell::*, VisualBox};
+use crate::ui::visual_box::{Cell::*, StyledCell, VisualBox};
 
 pub struct Terminal {
     stdout: Stdout,
@@ -68,13 +68,6 @@ impl Terminal {
             crossterm::style::Print(text)
         )
         .unwrap();
-    }
-
-    fn set_style(&mut self, style: Option<ContentStyle>) {
-        match style {
-            Some(s) => queue!(self.stdout, SetStyle(s)).unwrap(),
-            None => queue!(self.stdout, ResetColor).unwrap(),
-        }
     }
 
     pub fn flush(&mut self) {

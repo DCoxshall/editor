@@ -8,9 +8,7 @@ pub enum Axis {
 
 /// Represents the layout of the views within a single tab.
 pub enum Layout {
-    Leaf {
-        view: View,
-    },
+    Leaf(View),
     Split {
         axis: Axis,
 
@@ -27,10 +25,6 @@ pub enum Layout {
 /// than one view.
 pub struct Tab {
     pub layout: Layout,
-
-    /// Recursive path into the Layout. An empty path means the focused view is the top-level leaf.
-    /// Otherwise, the first element indicates which child contains the focused view: true for the
-    /// upper/left split, false for the lower/right split.
     focused_view_path: Vec<bool>,
 }
 
@@ -40,54 +34,159 @@ impl Tab {
     /// * `views: Vec<View>`: views to be opened. If `views` is empty, we create a new empty view.
     pub fn new() -> Self {
         Self {
-            layout: Layout::Leaf { view: View::new() },
-
+            layout: Layout::Leaf(View::new()),
             focused_view_path: vec![],
         }
     }
 
     pub fn from_view(view: View) -> Self {
         Self {
-            layout: Layout::Leaf { view },
+            layout: Layout::Leaf(view),
             focused_view_path: vec![],
         }
     }
 
     pub fn insert_new_view(&mut self, new_view: View, direction: Axis) {
-        let focused_layout = self.get_current_layout_mut();
+        let focused_leaf = self.get_focused_leaf_mut();
 
-        let old_view = match focused_layout {
-            Layout::Leaf { view } => std::mem::replace(view, View::new()),
+        let old_view = match focused_leaf {
+            Layout::Leaf(view) => view.clone(),
             _ => unreachable!(),
         };
 
-        *focused_layout = Layout::Split {
+        *focused_leaf = Layout::Split {
             axis: direction,
             weight: 0.5,
             children: [
-                Box::new(Layout::Leaf { view: old_view }),
-                Box::new(Layout::Leaf { view: new_view }),
+                Box::new(Layout::Leaf(old_view)),
+                Box::new(Layout::Leaf(new_view)),
             ],
         };
 
-        // Optional: focus the newly created view
         self.focused_view_path.push(false);
     }
 
-    fn get_current_layout_mut(&mut self) -> &mut Layout {
+    /// Move one View to the right.
+    pub fn move_focus_right(&mut self) {
+        let old_focused_path = self.focused_view_path.clone();
+
+        // Get references to all layouts that are ancestors of the currently focused leaf.
+        let mut cur = &self.layout;
+        let mut layouts = Vec::new();
+        for &dir in &old_focused_path {
+            if let Layout::Split { children, .. } = cur {
+                layouts.push(cur);
+                cur = &children[dir as usize];
+            } else {
+                return;
+            }
+        }
+
+        // Traverse backwards through these layouts, until we find one that is a horizontal split,
+        // and we're on the left. If we don't find one, we just return - there is no split further
+        // right.
+        for i in (0..layouts.len()).rev() {
+            if let Layout::Split {
+                axis: Axis::Vertical,
+                children,
+                ..
+            } = layouts[i]
+            {
+                if !self.focused_view_path[i] {
+                    // Cross the split
+                    self.focused_view_path[i] = true;
+
+                    // Truncate and descend leftmost
+                    self.focused_view_path.truncate(i + 1);
+                    let mut node: &Layout = &children[1];
+                    while let Layout::Split { children, .. } = node {
+                        self.focused_view_path.push(false);
+                        node = &children[0];
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    /// If the path points past the edge of the tree, this method returns None. Otherwise, it
+    /// returns a reference to the layout pointed to by path.
+    fn get_layout_at(&self, path: &Vec<bool>) -> Option<&Layout> {
+        let mut cur_layout = &self.layout;
+        let mut consumed = 0;
+        for dir in path {
+            consumed += 1;
+            match cur_layout {
+                Layout::Split { children, .. } => {
+                    cur_layout = if *dir { &children[1] } else { &children[0] }
+                }
+                Layout::Leaf(..) => return None,
+            }
+        }
+        if consumed == path.len() {
+            Some(cur_layout)
+        } else {
+            None
+        }
+    }
+
+    /// If the path points past the edge of the tree, this method returns None. Otherwise, it
+    /// returns a reference to the layout pointed to by path.
+    fn get_layout_at_mut(&mut self, path: &Vec<bool>) -> Option<&mut Layout> {
         let mut cur_layout = &mut self.layout;
-        for dir in &self.focused_view_path {
+        let mut consumed = 0;
+        for dir in path {
+            consumed += 1;
             match cur_layout {
                 Layout::Split { children, .. } => {
                     cur_layout = if *dir {
-                        &mut children[0]
-                    } else {
                         &mut children[1]
-                    };
+                    } else {
+                        &mut children[0]
+                    }
                 }
-                Layout::Leaf { .. } => unreachable!(),
+                Layout::Leaf(..) => return None,
             }
         }
-        cur_layout
+        if consumed == path.len() {
+            Some(cur_layout)
+        } else {
+            None
+        }
+    }
+
+    fn get_focused_leaf_mut(&mut self) -> &mut Layout {
+        let focused_view_path = self.focused_view_path.clone();
+        let focused_layout = self
+            .get_layout_at_mut(&focused_view_path)
+            .expect("Focused path pointed past the end of the focus tree. File a bug report!");
+        match focused_layout {
+            Layout::Split { .. } => {
+                panic!("Focused path pointed to a split rather than a leaf. File a bug report!")
+            }
+            Layout::Leaf(..) => return focused_layout,
+        }
+    }
+
+    fn get_focused_leaf(&self) -> &Layout {
+        let focused_layout = self.get_layout_at(&self.focused_view_path);
+
+        let unwrapped = focused_layout.unwrap();
+
+        ("Focused path pointed past the end of the focus tree. File a bug report!");
+        match unwrapped {
+            Layout::Split { .. } => {
+                panic!("Focused path pointed to a split rather than a leaf. File a bug report!")
+            }
+            Layout::Leaf(..) => return unwrapped,
+        }
+    }
+
+    pub fn get_current_focused_view(&self) -> &View {
+        let current_leaf = self.get_focused_leaf();
+        match current_leaf {
+            Layout::Leaf(view) => view,
+            Layout::Split { .. } => unreachable!(),
+        }
     }
 }

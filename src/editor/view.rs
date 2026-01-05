@@ -3,6 +3,7 @@ use std::{fs::read_to_string, path::PathBuf};
 use crate::editor::buffer::Buffer;
 
 /// "View" into a single file. Handles visualisation of the text in its buffer.
+#[derive(Clone, PartialEq)]
 pub struct View {
     /// Text from the file we're currently editing.
     pub buffer: Buffer,
