@@ -3,21 +3,34 @@ use crossterm::{
     event::{self, Event},
     execute, queue,
     style::SetStyle,
-    terminal::{self, ClearType, disable_raw_mode},
+    terminal::{self, ClearType, disable_raw_mode, size},
 };
 use std::io::{Stdout, Write, stdout};
 
-use crate::ui::visual_box::{Cell::*, StyledCell, VisualBox};
+use crate::ui::visual_box::{Cell::*, VisualBox};
 
 pub struct Terminal {
     stdout: Stdout,
+    visual_box: VisualBox,
 }
 
 impl Terminal {
     pub fn new() -> Result<Self, std::io::Error> {
+        let (width, height) = size()?;
         terminal::enable_raw_mode()?;
         execute!(stdout(), terminal::EnterAlternateScreen)?;
-        Ok(Self { stdout: stdout() })
+        Ok(Self {
+            stdout: stdout(),
+            visual_box: VisualBox::new(width as usize, height as usize),
+        })
+    }
+
+    /// Reset the internal VisualBox to the terminal's new size.
+    pub fn resize(&mut self) {
+        let (width, height) = size().unwrap();
+        let width = width as usize;
+        let height = height as usize;
+        self.visual_box = VisualBox::new(width, height);
     }
 
     pub fn cleanup(&mut self) -> Result<(), std::io::Error> {
@@ -49,13 +62,13 @@ impl Terminal {
     pub fn draw_visual_box(&mut self, x: usize, y: usize, visual_box: VisualBox) {
         for dx in 0..visual_box.width {
             for dy in 0..visual_box.height {
-                self.draw_cell(x + dx, y + dy, visual_box.at(dx, dy));
+                self.visual_box.set(x + dx, y + dy, visual_box.at(dx, dy));
             }
         }
     }
 
-    /// Draws a line on the terminal window at a given (x, y) coordinate.
-    fn draw_cell(&mut self, x: usize, y: usize, styled_cell: &StyledCell) {
+    fn render_cell_at(&mut self, x: usize, y: usize) {
+        let styled_cell = self.visual_box.at(x, y);
         let text = match &styled_cell.cell {
             Empty => " ",
             Grapheme(g) => g,
@@ -71,6 +84,11 @@ impl Terminal {
     }
 
     pub fn flush(&mut self) {
+        for i in 0..self.visual_box.height {
+            for j in 0..self.visual_box.width {
+                self.render_cell_at(j, i);
+            }
+        }
         self.stdout.flush().unwrap();
     }
 

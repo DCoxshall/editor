@@ -30,8 +30,12 @@ fn main() -> Result<()> {
     loop {
         ui::render(&editor, &mut terminal);
         let event = terminal.read_event()?;
-        editor.handle_input(event);
 
+        if event.is_resize() {
+            terminal.resize();
+        } else {
+            editor.handle_input(event);
+        }
         if editor.quit {
             break;
         }

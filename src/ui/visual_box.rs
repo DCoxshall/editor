@@ -54,6 +54,14 @@ impl VisualBox {
         self.draw_with_style(x, y, text, reset_style());
     }
 
+    pub fn set(&mut self, x: usize, y: usize, cell: &StyledCell) {
+        let idx = self.index(x, y);
+        if idx >= self.cells.len() {
+            return;
+        }
+        self.cells[idx] = cell.clone();
+    }
+
     pub fn draw_with_style(&mut self, mut x: usize, y: usize, text: &str, style: ContentStyle) {
         if y >= self.height || x >= self.width {
             return;
