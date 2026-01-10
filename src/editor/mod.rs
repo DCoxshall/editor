@@ -20,7 +20,7 @@ pub struct Editor {
     pub tabs: Vec<Tab>,
 
     /// Index into `Self::tabs`. There is always at least one tab, even if that tab is empty.
-    pub active_tab_idx: usize,
+    pub focused_tab_idx: usize,
 
     /// Represents whether the editor should quit on the next `mainloop`.
     pub quit: bool,
@@ -62,7 +62,7 @@ impl Editor {
 
         return Editor {
             tabs: tabs,
-            active_tab_idx: 0,
+            focused_tab_idx: 0,
             quit: false,
             command_input: String::from(""),
             mode: Mode::Command,
@@ -101,6 +101,14 @@ impl Editor {
         self.command_input.clear();
     }
 
+    // Changes the focused tab to the requested tab. If the requested tab does
+    // not exist, pass silently.
+    fn set_focused_tab(&mut self, requested_tab: usize) {
+        if requested_tab < self.tabs.len() {
+            self.focused_tab_idx = requested_tab;
+        }
+    }
+
     fn handle_keystroke(&mut self, key_event: KeyEvent) {
         if key_event.modifiers.contains(KeyModifiers::ALT) {
             match key_event.code {
@@ -109,7 +117,8 @@ impl Editor {
                 }
 
                 KeyCode::Char(c) if ('1'..='9').contains(&c) => {
-                    self.active_tab_idx = (c as u8 - b'1') as usize;
+                    let requested_tab = (c as u8 - b'1') as usize;
+                    self.set_focused_tab(requested_tab);
                 }
 
                 _ => {}
@@ -156,10 +165,10 @@ impl Editor {
     }
 
     pub fn get_current_tab_mut(&mut self) -> &mut Tab {
-        return &mut self.tabs[self.active_tab_idx];
+        return &mut self.tabs[self.focused_tab_idx];
     }
 
     pub fn get_current_tab(&self) -> &Tab {
-        return &self.tabs[self.active_tab_idx];
+        return &self.tabs[self.focused_tab_idx];
     }
 }
