@@ -17,6 +17,8 @@ pub fn render(editor: &Editor, term: &mut Terminal) {
 
     render_active_tab(editor, term, width, height - 1);
     render_command_bar(editor, term, 0, height - 1, width);
+
+    term.render();
     term.show_cursor();
     term.flush();
 }

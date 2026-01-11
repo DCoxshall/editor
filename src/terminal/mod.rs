@@ -83,12 +83,15 @@ impl Terminal {
         .unwrap();
     }
 
-    pub fn flush(&mut self) {
+    pub fn render(&mut self) {
         for i in 0..self.visual_box.height {
             for j in 0..self.visual_box.width {
                 self.render_cell_at(j, i);
             }
         }
+    }
+
+    pub fn flush(&mut self) {
         self.stdout.flush().unwrap();
     }
 
