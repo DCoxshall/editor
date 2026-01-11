@@ -1,5 +1,5 @@
 use crossterm::{
-    cursor::{self, Hide, Show},
+    cursor::{self, Hide, MoveTo, Show},
     event::{self, Event},
     execute, queue,
     style::SetStyle,
@@ -11,7 +11,17 @@ use crate::ui::visual_box::{Cell::*, VisualBox};
 
 pub struct Terminal {
     stdout: Stdout,
+
+    /// Represents what is set to be rendered to the screen at the end of the
+    /// next cycle. When the UI layer calls into the Terminal layer to draw to
+    /// the screen, instead of actually queueing something up to be drawn to the
+    /// screen, we just draw to this box, and queue up only once at the end of
+    /// each cycle.
     visual_box: VisualBox,
+
+    /// Represents what has already been rendered to the screen (i.e. it's a
+    /// historical copy of `Terminal::visual_box`).
+    rendered: VisualBox,
 }
 
 impl Terminal {
@@ -22,15 +32,17 @@ impl Terminal {
         Ok(Self {
             stdout: stdout(),
             visual_box: VisualBox::new(width as usize, height as usize),
+            rendered: VisualBox::new(width as usize, height as usize),
         })
     }
 
-    /// Reset the internal VisualBox to the terminal's new size.
+    /// Reset the internal VisualBoxes to the terminal's new size.
     pub fn resize(&mut self) {
         let (width, height) = size().unwrap();
         let width = width as usize;
         let height = height as usize;
         self.visual_box = VisualBox::new(width, height);
+        self.rendered = VisualBox::new(width, height);
     }
 
     pub fn cleanup(&mut self) -> Result<(), std::io::Error> {
@@ -81,14 +93,22 @@ impl Terminal {
             crossterm::style::Print(text)
         )
         .unwrap();
+        self.rendered.set(x, y, styled_cell);
     }
 
     pub fn render(&mut self) {
         for i in 0..self.visual_box.height {
             for j in 0..self.visual_box.width {
-                self.render_cell_at(j, i);
+                // Render each cell if and only if that cell has changed.
+                if self.visual_box.at(j, i) != self.rendered.at(j, i) {
+                    self.render_cell_at(j, i);
+                }
             }
         }
+
+        // For now, we explicitly want to move to (0, 0) between renders so that
+        // the cursor doesn't appear at the last-rendered cell.        
+        queue!(self.stdout, MoveTo(0, 0)).unwrap();
     }
 
     pub fn flush(&mut self) {
