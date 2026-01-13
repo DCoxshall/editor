@@ -155,11 +155,8 @@ impl Editor {
                     }
                 }
 
-                KeyCode::Right => {
-                    self.get_current_tab_mut().move_focus_right();
-                }
-
-                _ => {}
+                // If we can't match here, pass down to the focused tab to deal with.
+                _ => {self.get_current_tab_mut().handle_keystroke(key_event)}
             }
         }
     }

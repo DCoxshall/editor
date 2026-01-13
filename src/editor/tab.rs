@@ -1,3 +1,5 @@
+use crossterm::event::KeyEvent;
+
 use crate::editor::view::View;
 
 /// Is the given split a horizontal or vertical split?
@@ -46,6 +48,12 @@ impl Tab {
         }
     }
 
+    pub fn handle_keystroke(&mut self, key_event: KeyEvent) {
+        match key_event.code {
+            _ => self.get_current_focused_view_mut().handle_keystroke(key_event),
+        }
+    }
+
     pub fn insert_new_view(&mut self, new_view: View, direction: Axis) {
         let focused_leaf = self.get_focused_leaf_mut();
 
@@ -67,47 +75,47 @@ impl Tab {
     }
 
     /// Move one View to the right.
-    pub fn move_focus_right(&mut self) {
-        let old_focused_path = self.focused_view_path.clone();
+    // pub fn move_focus_right(&mut self) {
+    //     let old_focused_path = self.focused_view_path.clone();
 
-        // Get references to all layouts that are ancestors of the currently focused leaf.
-        let mut cur = &self.layout;
-        let mut layouts = Vec::new();
-        for &dir in &old_focused_path {
-            if let Layout::Split { children, .. } = cur {
-                layouts.push(cur);
-                cur = &children[dir as usize];
-            } else {
-                return;
-            }
-        }
+    //     // Get references to all layouts that are ancestors of the currently focused leaf.
+    //     let mut cur = &self.layout;
+    //     let mut layouts = Vec::new();
+    //     for &dir in &old_focused_path {
+    //         if let Layout::Split { children, .. } = cur {
+    //             layouts.push(cur);
+    //             cur = &children[dir as usize];
+    //         } else {
+    //             return;
+    //         }
+    //     }
 
-        // Traverse backwards through these layouts, until we find one that is a horizontal split,
-        // and we're on the left. If we don't find one, we just return - there is no split further
-        // right.
-        for i in (0..layouts.len()).rev() {
-            if let Layout::Split {
-                axis: Axis::Vertical,
-                children,
-                ..
-            } = layouts[i]
-            {
-                if !self.focused_view_path[i] {
-                    // Cross the split
-                    self.focused_view_path[i] = true;
+    //     // Traverse backwards through these layouts, until we find one that is a horizontal split,
+    //     // and we're on the left. If we don't find one, we just return - there is no split further
+    //     // right.
+    //     for i in (0..layouts.len()).rev() {
+    //         if let Layout::Split {
+    //             axis: Axis::Vertical,
+    //             children,
+    //             ..
+    //         } = layouts[i]
+    //         {
+    //             if !self.focused_view_path[i] {
+    //                 // Cross the split
+    //                 self.focused_view_path[i] = true;
 
-                    // Truncate and descend leftmost
-                    self.focused_view_path.truncate(i + 1);
-                    let mut node: &Layout = &children[1];
-                    while let Layout::Split { children, .. } = node {
-                        self.focused_view_path.push(false);
-                        node = &children[0];
-                    }
-                    return;
-                }
-            }
-        }
-    }
+    //                 // Truncate and descend leftmost
+    //                 self.focused_view_path.truncate(i + 1);
+    //                 let mut node: &Layout = &children[1];
+    //                 while let Layout::Split { children, .. } = node {
+    //                     self.focused_view_path.push(false);
+    //                     node = &children[0];
+    //                 }
+    //                 return;
+    //             }
+    //         }
+    //     }
+    // }
 
     /// If the path points past the edge of the tree, this method returns None. Otherwise, it
     /// returns a reference to the layout pointed to by path.
@@ -179,6 +187,14 @@ impl Tab {
                 panic!("Focused path pointed to a split rather than a leaf. File a bug report!")
             }
             Layout::Leaf(..) => return unwrapped,
+        }
+    }
+
+    pub fn get_current_focused_view_mut(&mut self) -> &mut View {
+        let current_leaf = self.get_focused_leaf_mut();
+        match current_leaf {
+            Layout::Leaf(view) => view,
+            Layout::Split { .. } => unreachable!(),
         }
     }
 

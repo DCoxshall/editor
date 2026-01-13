@@ -53,7 +53,7 @@ fn render_layout(
             Axis::Vertical => {
                 let left_width = (width as f32 * weight) as usize;
                 let mut right_width = (width as f32 - (width as f32 * weight)) as usize;
-                
+
                 // Avoid off-by-one errors when applying split weights.
                 if left_width + right_width != width {
                     right_width += 1;
@@ -65,7 +65,7 @@ fn render_layout(
             Axis::Horizontal => {
                 let upper_height = (height as f32 * weight) as usize;
                 let mut lower_height = (height as f32 - (height as f32 * weight)) as usize;
-                
+
                 // Avoid off-by-one errors when applying split weights.
                 if upper_height + lower_height != height {
                     lower_height += 1;
@@ -96,11 +96,19 @@ fn render_view(
     let view_line_count = view.buffer.text.len_lines();
 
     // We need to leave one line free for this view's status bar.
-    for line_idx in 0..(visual_box_height) {
-        if line_idx < view_line_count {
-            view_vb.draw(0, line_idx, &view.buffer.text.line(line_idx).to_string());
+    for visual_line_idx in 0..(visual_box_height) {
+        if visual_line_idx + view.start_row < view_line_count {
+            let line_text: String = view
+                .buffer
+                .text
+                .line(visual_line_idx + view.start_row)
+                .to_string()
+                .chars()
+                .skip(view.start_col)
+                .collect();
+            view_vb.draw(0, visual_line_idx, &line_text);
         } else {
-            view_vb.draw(0, line_idx, View::EMPTY_LINE_NOTATION);
+            view_vb.draw(0, visual_line_idx, View::EMPTY_LINE_NOTATION);
         }
     }
 
