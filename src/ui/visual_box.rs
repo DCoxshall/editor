@@ -3,13 +3,14 @@ use crossterm::style::{Attributes, ContentStyle};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum Cell {
     Empty,            // width 1
     Grapheme(String), // may be width 1 or 2
     Continuation,     // marks the second cell of a wide char
 }
-#[derive(Clone, PartialEq)]
+
+#[derive(Clone, PartialEq, Debug)]
 pub struct StyledCell {
     pub cell: Cell,
     pub style: ContentStyle,
@@ -35,7 +36,13 @@ impl VisualBox {
         Self {
             width,
             height,
-            cells: vec![StyledCell { cell: Cell::Empty, style: reset_style() }; (width * height) as usize],
+            cells: vec![
+                StyledCell {
+                    cell: Cell::Empty,
+                    style: reset_style()
+                };
+                (width * height) as usize
+            ],
         }
     }
 

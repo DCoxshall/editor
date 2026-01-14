@@ -12,16 +12,19 @@ use crate::ui::visual_box::{Cell::*, VisualBox};
 pub struct Terminal {
     stdout: Stdout,
 
-    /// Represents what is set to be rendered to the screen at the end of the
-    /// next cycle. When the UI layer calls into the Terminal layer to draw to
-    /// the screen, instead of actually queueing something up to be drawn to the
-    /// screen, we just draw to this box, and queue up only once at the end of
-    /// each cycle.
+    /// Represents what is set to be rendered to the screen at the end of the next cycle. When the
+    /// UI layer calls into the Terminal layer to draw to the screen, instead of actually queueing
+    /// something up to be drawn to the screen, we just draw to this box, and queue up only once at
+    /// the end of each cycle.
     visual_box: VisualBox,
 
-    /// Represents what has already been rendered to the screen (i.e. it's a
-    /// historical copy of `Terminal::visual_box`).
+    /// Represents what has already been rendered to the screen (i.e. it's a historical copy of
+    /// `Terminal::visual_box`).
     rendered: VisualBox,
+
+    /// Represents whether the last action that the user performed was to resize the terminal. When
+    /// this is `true`, we trigger a full redraw before setting it to false again.
+    just_resized: bool,
 }
 
 impl Terminal {
@@ -33,6 +36,7 @@ impl Terminal {
             stdout: stdout(),
             visual_box: VisualBox::new(width as usize, height as usize),
             rendered: VisualBox::new(width as usize, height as usize),
+            just_resized: false,
         })
     }
 
@@ -43,6 +47,7 @@ impl Terminal {
         let height = height as usize;
         self.visual_box = VisualBox::new(width, height);
         self.rendered = VisualBox::new(width, height);
+        self.just_resized = true;
     }
 
     pub fn cleanup(&mut self) -> Result<(), std::io::Error> {
@@ -70,7 +75,6 @@ impl Terminal {
         queue!(self.stdout, Show).unwrap();
     }
 
-    /// Compiles and draws a visual box on screen at the given (x, y) coordinates.
     pub fn draw_visual_box(&mut self, x: usize, y: usize, visual_box: VisualBox) {
         for dx in 0..visual_box.width {
             for dy in 0..visual_box.height {
@@ -100,14 +104,19 @@ impl Terminal {
         for i in 0..self.visual_box.height {
             for j in 0..self.visual_box.width {
                 // Render each cell if and only if that cell has changed.
-                if self.visual_box.at(j, i) != self.rendered.at(j, i) {
+                let rendered_cell = self.rendered.at(j, i);
+                let vb_cell = self.visual_box.at(j, i);
+                if vb_cell != rendered_cell || self.just_resized {
                     self.render_cell_at(j, i);
                 }
             }
         }
 
-        // For now, we explicitly want to move to (0, 0) between renders so that
-        // the cursor doesn't appear at the last-rendered cell.        
+        // Now that we've rendered the editor again, set `just_resized` back to false.
+        self.just_resized = false;
+
+        // For now, we explicitly want to move to (0, 0) between renders so that the cursor doesn't
+        // appear at the last-rendered cell.        
         queue!(self.stdout, MoveTo(0, 0)).unwrap();
     }
 
