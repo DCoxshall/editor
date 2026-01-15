@@ -74,52 +74,13 @@ impl Tab {
         self.focused_view_path.push(false);
     }
 
-    /// Move one View to the right.
-    // pub fn move_focus_right(&mut self) {
-    //     let old_focused_path = self.focused_view_path.clone();
-
-    //     // Get references to all layouts that are ancestors of the currently focused leaf.
-    //     let mut cur = &self.layout;
-    //     let mut layouts = Vec::new();
-    //     for &dir in &old_focused_path {
-    //         if let Layout::Split { children, .. } = cur {
-    //             layouts.push(cur);
-    //             cur = &children[dir as usize];
-    //         } else {
-    //             return;
-    //         }
-    //     }
-
-    //     // Traverse backwards through these layouts, until we find one that is a horizontal split,
-    //     // and we're on the left. If we don't find one, we just return - there is no split further
-    //     // right.
-    //     for i in (0..layouts.len()).rev() {
-    //         if let Layout::Split {
-    //             axis: Axis::Vertical,
-    //             children,
-    //             ..
-    //         } = layouts[i]
-    //         {
-    //             if !self.focused_view_path[i] {
-    //                 // Cross the split
-    //                 self.focused_view_path[i] = true;
-
-    //                 // Truncate and descend leftmost
-    //                 self.focused_view_path.truncate(i + 1);
-    //                 let mut node: &Layout = &children[1];
-    //                 while let Layout::Split { children, .. } = node {
-    //                     self.focused_view_path.push(false);
-    //                     node = &children[0];
-    //                 }
-    //                 return;
-    //             }
-    //         }
-    //     }
-    // }
+    pub fn get_focused_view_path(&self) -> &Vec<bool> {
+        &self.focused_view_path
+    }
 
     /// If the path points past the edge of the tree, this method returns None. Otherwise, it
     /// returns a reference to the layout pointed to by path.
-    fn get_layout_at(&self, path: &Vec<bool>) -> Option<&Layout> {
+    pub fn get_layout_at(&self, path: &Vec<bool>) -> Option<&Layout> {
         let mut cur_layout = &self.layout;
         let mut consumed = 0;
         for dir in path {
