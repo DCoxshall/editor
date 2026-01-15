@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use crate::editor::tab::Tab;
 use crate::editor::view::View;
+use crate::terminal::Terminal;
 
 #[derive(PartialEq)]
 pub enum Mode {
@@ -69,11 +70,11 @@ impl Editor {
         };
     }
 
-    pub fn handle_input(&mut self, event: Event) {
+    pub fn handle_input(&mut self, event: Event, terminal: &Terminal) {
         match event {
             Event::Key(key_event) => {
                 if key_event.is_press() {
-                    self.handle_keystroke(key_event);
+                    self.handle_keystroke(key_event, terminal);
                 }
             }
 
@@ -109,7 +110,7 @@ impl Editor {
         }
     }
 
-    fn handle_keystroke(&mut self, key_event: KeyEvent) {
+    fn handle_keystroke(&mut self, key_event: KeyEvent, terminal: &Terminal) {
         if key_event.modifiers.contains(KeyModifiers::ALT) {
             match key_event.code {
                 KeyCode::Char('d') => {
@@ -121,7 +122,10 @@ impl Editor {
                     self.set_focused_tab(requested_tab);
                 }
 
-                _ => {}
+                _ => {
+                    // Pass Alt+other keys to the tab to handle (e.g., Alt+Arrow for focus movement)
+                    self.get_current_tab_mut().handle_keystroke(key_event, terminal);
+                }
             }
         } else {
             match key_event.code {
@@ -156,7 +160,7 @@ impl Editor {
                 }
 
                 // If we can't match here, pass down to the focused tab to deal with.
-                _ => {self.get_current_tab_mut().handle_keystroke(key_event)}
+                _ => {self.get_current_tab_mut().handle_keystroke(key_event, terminal)}
             }
         }
     }
