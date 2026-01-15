@@ -20,6 +20,20 @@ pub struct ViewBounds {
     pub height: usize,
 }
 
+impl ViewBounds {
+    pub fn contains(&self, target_x: usize, target_y: usize) -> bool {
+        if target_x < self.x
+            || target_x >= self.x + self.width
+            || target_y < self.y
+            || target_y >= self.y + self.height
+        {
+            return false;
+        }
+
+        true
+    }
+}
+
 /// Contains all information needed to render a tab's layout
 pub struct UiDescriptor {
     pub views: Vec<ViewBounds>,
@@ -31,15 +45,15 @@ impl UiDescriptor {
     pub fn from_tab(tab: &crate::editor::tab::Tab, width: usize, height: usize) -> Self {
         let mut views = Vec::new();
         let focused_path = tab.get_focused_view_path().clone();
-        
+
         Self::collect_view_bounds(&tab.layout, &mut views, Vec::new(), 0, 0, width, height);
-        
+
         Self {
             views,
             focused_path,
         }
     }
-    
+
     /// Recursively collects all view bounds from the layout tree
     fn collect_view_bounds(
         layout: &Layout,
@@ -68,38 +82,70 @@ impl UiDescriptor {
                 Axis::Vertical => {
                     let left_width = (width as f32 * weight) as usize;
                     let mut right_width = (width as f32 - (width as f32 * weight)) as usize;
-                    
+
                     // Avoid off-by-one errors when applying split weights.
                     if left_width + right_width != width {
                         right_width += 1;
                     }
                     let right_x = x + left_width;
-                    
+
                     let mut left_path = current_path.clone();
                     left_path.push(false);
-                    Self::collect_view_bounds(&children[0], views, left_path, x, y, left_width, height);
-                    
+                    Self::collect_view_bounds(
+                        &children[0],
+                        views,
+                        left_path,
+                        x,
+                        y,
+                        left_width,
+                        height,
+                    );
+
                     let mut right_path = current_path.clone();
                     right_path.push(true);
-                    Self::collect_view_bounds(&children[1], views, right_path, right_x, y, right_width, height);
+                    Self::collect_view_bounds(
+                        &children[1],
+                        views,
+                        right_path,
+                        right_x,
+                        y,
+                        right_width,
+                        height,
+                    );
                 }
                 Axis::Horizontal => {
                     let upper_height = (height as f32 * weight) as usize;
                     let mut lower_height = (height as f32 - (height as f32 * weight)) as usize;
-                    
+
                     // Avoid off-by-one errors when applying split weights.
                     if upper_height + lower_height != height {
                         lower_height += 1;
                     }
                     let lower_y = y + upper_height;
-                    
+
                     let mut upper_path = current_path.clone();
                     upper_path.push(false);
-                    Self::collect_view_bounds(&children[0], views, upper_path, x, y, width, upper_height);
-                    
+                    Self::collect_view_bounds(
+                        &children[0],
+                        views,
+                        upper_path,
+                        x,
+                        y,
+                        width,
+                        upper_height,
+                    );
+
                     let mut lower_path = current_path.clone();
                     lower_path.push(true);
-                    Self::collect_view_bounds(&children[1], views, lower_path, x, lower_y, width, lower_height);
+                    Self::collect_view_bounds(
+                        &children[1],
+                        views,
+                        lower_path,
+                        x,
+                        lower_y,
+                        width,
+                        lower_height,
+                    );
                 }
             },
         }
@@ -121,12 +167,13 @@ pub fn render(editor: &Editor, term: &mut Terminal) {
 fn render_active_tab(editor: &Editor, term: &mut Terminal, width: usize, height: usize) {
     let tab = editor.get_current_tab();
     let descriptor = UiDescriptor::from_tab(tab, width, height);
-    
+
     for view_bounds in &descriptor.views {
         // Look up the view by path
-        let view_layout = tab.get_layout_at(&view_bounds.path)
+        let view_layout = tab
+            .get_layout_at(&view_bounds.path)
             .expect("Path in UiDescriptor should be valid");
-        
+
         match view_layout {
             Layout::Leaf(view) => {
                 let is_focused = view_bounds.path == descriptor.focused_path;
@@ -171,7 +218,14 @@ fn render_view_with_bounds(
         }
     }
 
-    render_view_status_bar(view, term, bounds.x, bounds.y + bounds.height - 1, bounds.width, is_focused);
+    render_view_status_bar(
+        view,
+        term,
+        bounds.x,
+        bounds.y + bounds.height - 1,
+        bounds.width,
+        is_focused,
+    );
 
     term.draw_visual_box(bounds.x, bounds.y, view_vb);
 }
