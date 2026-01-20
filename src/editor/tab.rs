@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::editor::view::View;
 use crate::terminal::Terminal;
-use crate::ui::UiDescriptor;
+use crate::ui::ui_descriptor::UiDescriptor;
 
 /// Is the given split a horizontal or vertical split?
 pub enum Axis {

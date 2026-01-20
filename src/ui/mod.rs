@@ -1,156 +1,17 @@
+pub mod ui_descriptor;
+pub mod view_bounds;
 pub mod visual_box;
 
+use crate::{
+    editor::{Editor, Mode, tab::Layout, view::View},
+    terminal::Terminal,
+};
 use crossterm::style::Attributes;
 use crossterm::style::Color;
 use crossterm::style::ContentStyle;
-
-use crate::editor::Mode;
-use crate::ui::visual_box::VisualBox;
-use crate::{editor::Editor, terminal::Terminal};
-
-use crate::editor::tab::{Axis, Layout};
-use crate::editor::view::View;
-
-/// Represents the bounding box and path for a single view
-pub struct ViewBounds {
-    pub path: Vec<bool>,
-    pub x: usize,
-    pub y: usize,
-    pub width: usize,
-    pub height: usize,
-}
-
-impl ViewBounds {
-    pub fn contains(&self, target_x: usize, target_y: usize) -> bool {
-        if target_x < self.x
-            || target_x >= self.x + self.width
-            || target_y < self.y
-            || target_y >= self.y + self.height
-        {
-            return false;
-        }
-
-        true
-    }
-}
-
-/// Contains all information needed to render a tab's layout
-pub struct UiDescriptor {
-    pub views: Vec<ViewBounds>,
-    pub focused_path: Vec<bool>,
-}
-
-impl UiDescriptor {
-    /// Constructs a UiDescriptor from a tab and terminal dimensions
-    pub fn from_tab(tab: &crate::editor::tab::Tab, width: usize, height: usize) -> Self {
-        let mut views = Vec::new();
-        let focused_path = tab.get_focused_view_path().clone();
-
-        Self::collect_view_bounds(&tab.layout, &mut views, Vec::new(), 0, 0, width, height);
-
-        Self {
-            views,
-            focused_path,
-        }
-    }
-
-    /// Recursively collects all view bounds from the layout tree
-    fn collect_view_bounds(
-        layout: &Layout,
-        views: &mut Vec<ViewBounds>,
-        current_path: Vec<bool>,
-        x: usize,
-        y: usize,
-        width: usize,
-        height: usize,
-    ) {
-        match layout {
-            Layout::Leaf(_) => {
-                views.push(ViewBounds {
-                    path: current_path,
-                    x,
-                    y,
-                    width,
-                    height,
-                });
-            }
-            Layout::Split {
-                axis,
-                weight,
-                children,
-            } => match axis {
-                Axis::Vertical => {
-                    let left_width = (width as f32 * weight) as usize;
-                    let mut right_width = (width as f32 - (width as f32 * weight)) as usize;
-
-                    // Avoid off-by-one errors when applying split weights.
-                    if left_width + right_width != width {
-                        right_width += 1;
-                    }
-                    let right_x = x + left_width;
-
-                    let mut left_path = current_path.clone();
-                    left_path.push(false);
-                    Self::collect_view_bounds(
-                        &children[0],
-                        views,
-                        left_path,
-                        x,
-                        y,
-                        left_width,
-                        height,
-                    );
-
-                    let mut right_path = current_path.clone();
-                    right_path.push(true);
-                    Self::collect_view_bounds(
-                        &children[1],
-                        views,
-                        right_path,
-                        right_x,
-                        y,
-                        right_width,
-                        height,
-                    );
-                }
-                Axis::Horizontal => {
-                    let upper_height = (height as f32 * weight) as usize;
-                    let mut lower_height = (height as f32 - (height as f32 * weight)) as usize;
-
-                    // Avoid off-by-one errors when applying split weights.
-                    if upper_height + lower_height != height {
-                        lower_height += 1;
-                    }
-                    let lower_y = y + upper_height;
-
-                    let mut upper_path = current_path.clone();
-                    upper_path.push(false);
-                    Self::collect_view_bounds(
-                        &children[0],
-                        views,
-                        upper_path,
-                        x,
-                        y,
-                        width,
-                        upper_height,
-                    );
-
-                    let mut lower_path = current_path.clone();
-                    lower_path.push(true);
-                    Self::collect_view_bounds(
-                        &children[1],
-                        views,
-                        lower_path,
-                        x,
-                        lower_y,
-                        width,
-                        lower_height,
-                    );
-                }
-            },
-        }
-    }
-}
+use ui_descriptor::UiDescriptor;
+use view_bounds::ViewBounds;
+use visual_box::VisualBox;
 
 pub fn render(editor: &Editor, term: &mut Terminal) {
     term.hide_cursor();
@@ -203,11 +64,12 @@ fn render_view_with_bounds(
 
     // We need to leave one line free for this view's status bar.
     for visual_line_idx in 0..(visual_box_height) {
-        if visual_line_idx + view.start_row < view_line_count {
+        let file_line_idx = visual_line_idx + view.start_row;
+        if file_line_idx < view_line_count {
             let line_text: String = view
                 .buffer
                 .text
-                .line(visual_line_idx + view.start_row)
+                .line(file_line_idx)
                 .to_string()
                 .chars()
                 .skip(view.start_col)
