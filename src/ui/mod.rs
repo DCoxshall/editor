@@ -2,16 +2,16 @@ pub mod ui_descriptor;
 pub mod view_bounds;
 pub mod visual_box;
 
+use ui_descriptor::UiDescriptor;
+use view_bounds::ViewBounds;
+use visual_box::VisualBox;
+
 use crate::{
     editor::{Editor, Mode, tab::Layout, view::View},
     terminal::Terminal,
 };
-use crossterm::style::Attributes;
-use crossterm::style::Color;
-use crossterm::style::ContentStyle;
-use ui_descriptor::UiDescriptor;
-use view_bounds::ViewBounds;
-use visual_box::VisualBox;
+
+use crossterm::style::{Attributes, Color, ContentStyle};
 
 pub fn render(editor: &Editor, term: &mut Terminal) {
     term.hide_cursor();
