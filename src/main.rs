@@ -2,6 +2,7 @@ mod editor;
 mod terminal;
 mod ui;
 
+use crossterm::terminal::size;
 use editor::Editor;
 use terminal::Terminal;
 
@@ -39,6 +40,9 @@ fn main() -> Result<()> {
         if editor.quit {
             break;
         }
+
+        let (width, height) = size().unwrap();
+        editor.ensure_cursor_shown(width as usize, height as usize);
     }
 
     Ok(())

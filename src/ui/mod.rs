@@ -7,7 +7,11 @@ use view_bounds::ViewBounds;
 use visual_box::VisualBox;
 
 use crate::{
-    editor::{Editor, Mode, tab::Layout, view::View},
+    editor::{
+        Editor, Mode,
+        tab::{Layout, Tab},
+        view::View,
+    },
     terminal::Terminal,
 };
 
@@ -15,20 +19,22 @@ use crossterm::style::{Attributes, Color, ContentStyle};
 
 pub fn render(editor: &Editor, term: &mut Terminal) {
     term.hide_cursor();
-    let (width, height) = term.size();
 
-    render_active_tab(editor, term, width, height - 1);
+    let (width, height) = term.size();
+    let current_tab = editor.get_current_tab();
+    let descriptor = UiDescriptor::from_tab(current_tab, width, height);
+    let (cursor_x, cursor_y) = get_visual_cursor_pos(&descriptor, current_tab);
+
+    render_active_tab(current_tab, &descriptor, term);
     render_command_bar(editor, term, 0, height - 1, width);
 
     term.render();
+    term.place_cursor(cursor_x, cursor_y);
     term.show_cursor();
     term.flush();
 }
 
-fn render_active_tab(editor: &Editor, term: &mut Terminal, width: usize, height: usize) {
-    let tab = editor.get_current_tab();
-    let descriptor = UiDescriptor::from_tab(tab, width, height);
-
+fn render_active_tab(tab: &Tab, descriptor: &UiDescriptor, term: &mut Terminal) {
     for view_bounds in &descriptor.views {
         // Look up the view by path
         let view_layout = tab
@@ -141,4 +147,18 @@ fn render_command_bar(editor: &Editor, term: &mut Terminal, x: usize, y: usize, 
     command_input_vb.draw(0, 0, &prompt_start);
 
     term.draw_visual_box(x, y, command_input_vb);
+}
+
+fn get_visual_cursor_pos(ui_descriptor: &UiDescriptor, tab: &Tab) -> (usize, usize) {
+    for bound in &ui_descriptor.views {
+        if bound.path == tab.focused_view_path {
+            let view = tab.get_current_focused_view();
+            let (abs_x, abs_y) = view.get_visual_cursor_pos();
+            return (bound.x + abs_x, bound.y + abs_y);
+        }
+    }
+
+    unreachable!(
+        "UiDescriptor::focused_path did not point to an actual path in the focused tab. File a bug report!"
+    );
 }

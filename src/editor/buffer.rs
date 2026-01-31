@@ -4,13 +4,17 @@ use ropey::Rope;
 #[derive(Clone, PartialEq)]
 pub struct Buffer {
     pub text: Rope,
-    cursor_idx: usize,
+
+    /// Index into the chars of self.text.
+    pub cursor_idx: usize,
 }
 
 impl Buffer {
     pub fn new(text: String) -> Self {
+        // Replace CRLF with LF.
+        let replaced = text.replace("\r\n", "\n");
         Buffer {
-            text: Rope::from_str(&text),
+            text: Rope::from_str(&replaced),
             cursor_idx: 0,
         }
     }

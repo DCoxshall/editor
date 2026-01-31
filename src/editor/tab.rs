@@ -38,7 +38,7 @@ pub enum Layout {
 /// than one view.
 pub struct Tab {
     pub layout: Layout,
-    focused_view_path: Vec<bool>,
+    pub focused_view_path: Vec<bool>,
 }
 
 impl Tab {
@@ -158,6 +158,19 @@ impl Tab {
         }
     }
 
+    fn get_focused_leaf(&self) -> &Layout {
+        let focused_view_path = self.focused_view_path.clone();
+        let focused_layout = self
+            .get_layout_at(&focused_view_path)
+            .expect("Focused path pointed past the end of the focus tree. File a bug report!");
+        match focused_layout {
+            Layout::Split { .. } => {
+                panic!("Focused path pointed to a split rather than a leaf. File a bug report!")
+            }
+            Layout::Leaf(..) => return focused_layout,
+        }
+    }
+
     fn get_focused_leaf_mut(&mut self) -> &mut Layout {
         let focused_view_path = self.focused_view_path.clone();
         let focused_layout = self
@@ -168,6 +181,14 @@ impl Tab {
                 panic!("Focused path pointed to a split rather than a leaf. File a bug report!")
             }
             Layout::Leaf(..) => return focused_layout,
+        }
+    }
+
+    pub fn get_current_focused_view(&self) -> &View {
+        let current_leaf = self.get_focused_leaf();
+        match current_leaf {
+            Layout::Leaf(view) => view,
+            Layout::Split { .. } => unreachable!(),
         }
     }
 
@@ -218,5 +239,14 @@ impl Tab {
         }
 
         false
+    }
+
+    pub fn ensure_cursor_shown(&mut self, width: usize, height: usize) {
+        let descriptor = UiDescriptor::from_tab(self, width, height - 1);
+        for view_bound in descriptor.views {
+            if view_bound.path == self.focused_view_path {
+                self.get_current_focused_view_mut().ensure_cursor_shown(view_bound.width, view_bound.height);
+            }
+        }
     }
 }

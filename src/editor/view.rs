@@ -45,27 +45,91 @@ impl View {
         }
     }
 
+    fn line_len(&self, line_idx: usize) -> usize {
+        let line = self.buffer.text.line(line_idx);
+        if line.to_string().ends_with('\n') {
+            return line.len_chars() - 1;
+        } else if line.to_string().ends_with("\r\n") {
+            return line.len_chars() - 2;
+        }
+        return line.len_chars();
+    }
+
     pub fn handle_keystroke(&mut self, key_event: KeyEvent) {
         match key_event.code {
             KeyCode::Left => {
-                if self.start_col != 0 {
-                    self.start_col -= 1;
-                }
+                self.move_cursor_left();
             }
             KeyCode::Right => {
-                self.start_col += 1;
+                self.move_cursor_right();
             }
             KeyCode::Up => {
-                if self.start_row != 0 {
-                    self.start_row -= 1;
-                }
+                self.move_cursor_up();
             }
             KeyCode::Down => {
-                self.start_row += 1;
+                self.move_cursor_down();
             }
 
             // Couldn't match at editor level, tab level, or here, so disregard.
             _ => {}
+        }
+    }
+
+    fn move_cursor_right(&mut self) {
+        self.buffer.cursor_idx += 1;
+    }
+
+    fn move_cursor_left(&mut self) {
+        if self.buffer.cursor_idx > 0 {
+        self.buffer.cursor_idx -= 1;}
+    }
+
+    fn move_cursor_up(&mut self) {
+        let (col, line) = self.get_logical_cursor_pos();
+        if line != 0 {
+            let prev_line_len = self.line_len(line - 1);
+
+            self.buffer.cursor_idx = self.buffer.text.line_to_char(line - 1) + prev_line_len.min(col);
+            
+        }
+    }
+
+    fn move_cursor_down(&mut self) {
+        let (col, line) = self.get_logical_cursor_pos();
+        if line != self.buffer.text.len_lines() - 1 {
+            let next_line_len = self.line_len(line + 1);
+
+            self.buffer.cursor_idx = self.buffer.text.line_to_char(line + 1) + next_line_len.min(col);
+        }
+    }
+    
+    fn get_logical_cursor_pos(&self) -> (usize, usize) {
+        let line = self.buffer.text.char_to_line(self.buffer.cursor_idx);
+        let col = self.buffer.cursor_idx - self.buffer.text.line_to_char(line);
+        (col, line)
+    }
+
+    /// Returns the location of the cursor relative to the view's own visual origin.
+    pub fn get_visual_cursor_pos(&self) -> (usize, usize) {
+        let (logical_x, logical_y) = self.get_logical_cursor_pos();
+        (logical_x - self.start_col, logical_y - self.start_row)
+    }
+
+    /// Adjust `self.start_row` and `self.start_col` to ensure the cursor is within the
+    /// visual bounds of the view.
+    pub fn ensure_cursor_shown(&mut self, width: usize, height: usize) {
+        let (cursor_x, cursor_y) = self.get_logical_cursor_pos();
+        if self.start_col + width <= cursor_x {
+            self.start_col = cursor_x - width + 1;
+        }
+        if self.start_row + height <= cursor_y {
+            self.start_row = cursor_y - height + 1;
+        }
+        if cursor_x < self.start_col {
+            self.start_col = cursor_x;
+        }
+        if cursor_y < self.start_row {
+            self.start_row = cursor_y;
         }
     }
 }

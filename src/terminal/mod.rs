@@ -1,5 +1,5 @@
 use crossterm::{
-    cursor::{self, Hide, MoveTo, Show},
+    cursor::{self, Hide, Show},
     event::{self, Event},
     execute, queue,
     style::SetStyle,
@@ -83,6 +83,11 @@ impl Terminal {
         }
     }
 
+    /// Places the cursor on-screen at the specified coordinates.
+    pub fn place_cursor(&mut self, x: usize, y: usize) {
+        queue!(self.stdout, cursor::MoveTo(x as u16, y as u16)).unwrap();
+    }
+
     fn render_cell_at(&mut self, x: usize, y: usize) {
         let styled_cell = self.visual_box.at(x, y);
         let text = match &styled_cell.cell {
@@ -114,10 +119,6 @@ impl Terminal {
 
         // Now that we've rendered the editor again, set `just_resized` back to false.
         self.just_resized = false;
-
-        // For now, we explicitly want to move to (0, 0) between renders so that the cursor doesn't
-        // appear at the last-rendered cell.        
-        queue!(self.stdout, MoveTo(0, 0)).unwrap();
     }
 
     pub fn flush(&mut self) {

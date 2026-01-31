@@ -172,4 +172,10 @@ impl Editor {
     pub fn get_current_tab(&self) -> &Tab {
         return &self.tabs[self.focused_tab_idx];
     }
+
+    /// Scrolls the currently focused view to make sure that the cursor is currently
+    /// being shown.
+    pub fn ensure_cursor_shown(&mut self, width: usize, height: usize) {
+        self.get_current_tab_mut().ensure_cursor_shown(width, height);
+    }
 }
