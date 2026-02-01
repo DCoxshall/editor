@@ -152,6 +152,7 @@ fn render_command_bar(editor: &Editor, term: &mut Terminal, x: usize, y: usize, 
     let mut prompt_start = match editor.mode {
         Mode::Command => String::from(">> "),
         Mode::Edit => String::from("#> "),
+        Mode::NamingFile => String::from("save as> "),
     };
     prompt_start.push_str(&editor.command_bar_content.buffer.text.to_string());
     command_input_vb.draw(0, 0, &prompt_start);
@@ -165,20 +166,27 @@ fn get_visual_cursor_pos(
     tab: &Tab,
     height: usize,
 ) -> (usize, usize) {
-    if editor.mode == Mode::Edit {
-        for bound in &ui_descriptor.views {
-            if bound.path == tab.focused_view_path {
-                let view = tab.get_current_focused_view();
-                let (abs_x, abs_y) = view.get_visual_cursor_pos();
-                return (bound.x + abs_x, bound.y + abs_y);
+    match editor.mode {
+        Mode::Edit => {
+            for bound in &ui_descriptor.views {
+                if bound.path == tab.focused_view_path {
+                    let view = tab.get_current_focused_view();
+                    let (abs_x, abs_y) = view.get_visual_cursor_pos();
+                    return (bound.x + abs_x, bound.y + abs_y);
+                }
             }
-        }
 
-        unreachable!(
-            "UiDescriptor::focused_path did not point to an actual path in the focused tab. File a bug report!"
-        );
-    } else {
-        let (cursor_x, cursor_y) = editor.command_bar_content.get_visual_cursor_pos();
-        return (cursor_x + 3, cursor_y + height - 1)
+            unreachable!(
+                "UiDescriptor::focused_path did not point to an actual path in the focused tab. File a bug report!"
+            );
+        }
+        Mode::Command => {
+            let (cursor_x, cursor_y) = editor.command_bar_content.get_visual_cursor_pos();
+            return (cursor_x + 3, cursor_y + height - 1);
+        }
+        Mode::NamingFile => {
+            let (cursor_x, cursor_y) = editor.command_bar_content.get_visual_cursor_pos();
+            return (cursor_x + 9, cursor_y + height - 1);
+        }
     }
 }

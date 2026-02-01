@@ -8,6 +8,11 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::editor::buffer::Buffer;
 
+pub enum SaveResult {
+    Success,
+    NeedsNaming
+}
+
 /// Handles visualisation of the text in its buffer. Can be used wherever text needs to
 /// be rendered to the screen, for example the text in a file, or the text in the
 /// command bar.
@@ -86,12 +91,14 @@ impl View {
 
             KeyCode::Char(c) => {
                 if key_event.modifiers.contains(KeyModifiers::ALT) {
-                    if c == 's' {
-                        self.save();
-                    }
+
                 } else {
                     self.buffer.insert(c);
                 }
+            }
+
+            KeyCode::Enter => {
+                self.buffer.insert('\n');
             }
 
             KeyCode::Backspace => {
@@ -167,15 +174,19 @@ impl View {
         }
     }
 
-    pub fn save(&self) {
+    pub fn save(&self) -> SaveResult {
         match &self.file_path {
             Some(path) => {
                 let mut file = File::create(path).unwrap();
                 for chunk in self.buffer.text.chunks() {
                     file.write_all(chunk.as_bytes()).unwrap();
                 }
+
+                SaveResult::Success
             }
-            None => {}
+            None => {
+                SaveResult::NeedsNaming
+            }
         }
     }
 }

@@ -3,16 +3,17 @@ pub mod tab;
 pub mod view;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
-use crate::editor::tab::Tab;
 use crate::editor::view::View;
+use crate::editor::{tab::Tab, view::SaveResult};
 use crate::terminal::Terminal;
 
 #[derive(PartialEq)]
 pub enum Mode {
     Command,
     Edit,
+    NamingFile,
 }
 
 /// Main editor data structure.
@@ -123,6 +124,17 @@ impl Editor {
                     self.quit = true;
                 }
 
+                KeyCode::Char('s') => match self
+                    .get_current_tab_mut()
+                    .get_current_focused_view_mut()
+                    .save()
+                {
+                    SaveResult::Success => {}
+                    SaveResult::NeedsNaming => {
+                        self.mode = Mode::NamingFile;
+                    }
+                },
+
                 KeyCode::Char(c) if ('1'..='9').contains(&c) => {
                     let requested_tab = (c as u8 - b'1') as usize;
                     self.set_focused_tab(requested_tab);
@@ -140,37 +152,55 @@ impl Editor {
                     self.quit = true;
                 }
 
-                KeyCode::Enter => {
-                    if self.mode == Mode::Command {
+                KeyCode::Enter => match self.mode {
+                    Mode::Command => {
                         self.run_user_command();
                     }
-                }
-
-                KeyCode::F(1) => {
-                    if self.mode == Mode::Command {
+                    Mode::Edit => {
+                        self.get_current_tab_mut().handle_keystroke(key_event, terminal);
+                    }
+                    Mode::NamingFile => {
+                        let new_name = self.command_bar_content.buffer.text.to_string();
+                        let current_view =
+                            self.get_current_tab_mut().get_current_focused_view_mut();
+                        current_view.file_path = Some(PathBuf::from_str(&new_name).unwrap());
+                        current_view.save();
                         self.mode = Mode::Edit;
-                    } else {
+                        self.command_bar_content.buffer.clear();
+                    }
+                },
+
+                KeyCode::F(1) => match self.mode {
+                    Mode::Command => {
+                        self.mode = Mode::Edit;
+                    }
+                    Mode::Edit => {
                         self.mode = Mode::Command;
                     }
-                }
+                    Mode::NamingFile => {
+                        self.command_bar_content.buffer.clear();
+                        self.mode = Mode::Edit;
+                    }
+                },
 
-                KeyCode::Backspace => {
-                    if self.mode == Mode::Command {
+                KeyCode::Backspace => match self.mode {
+                    Mode::Command | Mode::NamingFile => {
                         self.command_bar_content.buffer.backspace();
-                    } else {
-                        self.get_current_tab_mut()
-                            .handle_keystroke(key_event, terminal);
                     }
-                }
+                    Mode::Edit => self
+                        .get_current_tab_mut()
+                        .handle_keystroke(key_event, terminal),
+                },
 
-                KeyCode::Char(c) => {
-                    if self.mode == Mode::Command {
+                KeyCode::Char(c) => match self.mode {
+                    Mode::Command | Mode::NamingFile => {
                         self.command_bar_content.buffer.insert(c);
-                    } else {
+                    }
+                    Mode::Edit => {
                         self.get_current_tab_mut()
                             .handle_keystroke(key_event, terminal);
                     }
-                }
+                },
 
                 // If we can't match here, pass down to the focused tab to deal with.
                 _ => self
