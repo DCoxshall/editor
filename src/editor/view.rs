@@ -1,17 +1,29 @@
-use std::{fs::read_to_string, path::PathBuf};
+use std::{
+    fs::{File, read_to_string},
+    io::Write,
+    path::PathBuf,
+};
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::editor::buffer::Buffer;
 
-/// "View" into a single file. Handles visualisation of the text in its buffer.
+/// Handles visualisation of the text in its buffer. Can be used wherever text needs to
+/// be rendered to the screen, for example the text in a file, or the text in the
+/// command bar.
 #[derive(Clone, PartialEq)]
 pub struct View {
     /// Text from the file we're currently editing.
     pub buffer: Buffer,
 
-    // Path to said file.
-    pub file_path: PathBuf,
+    // Path to said file. A view doesn't necessarily have a corresponding file - for
+    // example, if the user has just opened a new view, or the view is being used as the
+    // view for the command bar.
+    pub file_path: Option<PathBuf>,
+
+    /// Not every View will have a status bar. If this view is being used as the view
+    /// for the command bar, there won't be a status bar, for instance.
+    pub has_status_bar: bool,
 
     pub start_row: usize,
     pub start_col: usize,
@@ -28,9 +40,10 @@ impl View {
         let text = read_to_string(&path)?;
         Ok(View {
             buffer: Buffer::new(text),
-            file_path: path,
+            file_path: Some(path),
             start_row: 0,
             start_col: 0,
+            has_status_bar: true,
         })
     }
 
@@ -39,9 +52,10 @@ impl View {
     pub fn new() -> Self {
         Self {
             buffer: Buffer::new(String::from("")),
-            file_path: PathBuf::new(),
+            file_path: None,
             start_row: 0,
             start_col: 0,
+            has_status_bar: true,
         }
     }
 
@@ -70,6 +84,24 @@ impl View {
                 self.move_cursor_down();
             }
 
+            KeyCode::Char(c) => {
+                if key_event.modifiers.contains(KeyModifiers::ALT) {
+                    if c == 's' {
+                        self.save();
+                    }
+                } else {
+                    self.buffer.insert(c);
+                }
+            }
+
+            KeyCode::Backspace => {
+                self.buffer.backspace();
+            }
+
+            KeyCode::Delete => {
+                self.buffer.delete();
+            }
+
             // Couldn't match at editor level, tab level, or here, so disregard.
             _ => {}
         }
@@ -81,7 +113,8 @@ impl View {
 
     fn move_cursor_left(&mut self) {
         if self.buffer.cursor_idx > 0 {
-        self.buffer.cursor_idx -= 1;}
+            self.buffer.cursor_idx -= 1;
+        }
     }
 
     fn move_cursor_up(&mut self) {
@@ -89,8 +122,8 @@ impl View {
         if line != 0 {
             let prev_line_len = self.line_len(line - 1);
 
-            self.buffer.cursor_idx = self.buffer.text.line_to_char(line - 1) + prev_line_len.min(col);
-            
+            self.buffer.cursor_idx =
+                self.buffer.text.line_to_char(line - 1) + prev_line_len.min(col);
         }
     }
 
@@ -99,10 +132,11 @@ impl View {
         if line != self.buffer.text.len_lines() - 1 {
             let next_line_len = self.line_len(line + 1);
 
-            self.buffer.cursor_idx = self.buffer.text.line_to_char(line + 1) + next_line_len.min(col);
+            self.buffer.cursor_idx =
+                self.buffer.text.line_to_char(line + 1) + next_line_len.min(col);
         }
     }
-    
+
     fn get_logical_cursor_pos(&self) -> (usize, usize) {
         let line = self.buffer.text.char_to_line(self.buffer.cursor_idx);
         let col = self.buffer.cursor_idx - self.buffer.text.line_to_char(line);
@@ -130,6 +164,18 @@ impl View {
         }
         if cursor_y < self.start_row {
             self.start_row = cursor_y;
+        }
+    }
+
+    pub fn save(&self) {
+        match &self.file_path {
+            Some(path) => {
+                let mut file = File::create(path).unwrap();
+                for chunk in self.buffer.text.chunks() {
+                    file.write_all(chunk.as_bytes()).unwrap();
+                }
+            }
+            None => {}
         }
     }
 }

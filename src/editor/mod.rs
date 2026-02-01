@@ -28,7 +28,7 @@ pub struct Editor {
 
     /// Represents the command that the user is currently typing. Will be displayed in the command
     /// bar.
-    pub command_input: String,
+    pub command_bar_content: View,
 
     /// Represents which mode the editor is currently in.
     pub mode: Mode,
@@ -61,13 +61,16 @@ impl Editor {
             tabs.push(Tab::new());
         }
 
-        return Editor {
+        let mut new_editor = Editor {
             tabs: tabs,
             focused_tab_idx: 0,
             quit: false,
-            command_input: String::from(""),
+            command_bar_content: View::new(),
             mode: Mode::Command,
         };
+
+        new_editor.command_bar_content.has_status_bar = false;
+        return new_editor;
     }
 
     pub fn handle_input(&mut self, event: Event, terminal: &Terminal) {
@@ -85,21 +88,24 @@ impl Editor {
     /// Runs the command currently stored in `self.command_input`. Clears the command input after
     /// running.
     fn run_user_command(&mut self) {
-        if self.command_input == String::from("quit") {
+        let command = self.command_bar_content.buffer.text.to_string();
+        if command == String::from("quit") {
             self.quit = true;
-        } else if let Some(filename) = self.command_input.strip_prefix("hsplit") {
+        } else if let Some(filename) = command.strip_prefix("hsplit") {
             let filename = filename.trim_start();
             let pathbuf = PathBuf::from(filename);
             let view = View::from_path(pathbuf).unwrap();
-            self.get_current_tab_mut().insert_new_view(view, tab::Axis::Horizontal);
-        } else if let Some(filename) = self.command_input.strip_prefix("vsplit") {
+            self.get_current_tab_mut()
+                .insert_new_view(view, tab::Axis::Horizontal);
+        } else if let Some(filename) = command.strip_prefix("vsplit") {
             let filename = filename.trim_start();
             let pathbuf = PathBuf::from(filename);
             let view = View::from_path(pathbuf).unwrap();
-            self.get_current_tab_mut().insert_new_view(view, tab::Axis::Vertical);
+            self.get_current_tab_mut()
+                .insert_new_view(view, tab::Axis::Vertical);
         }
 
-        self.command_input.clear();
+        self.command_bar_content.buffer.clear();
     }
 
     // Changes the focused tab to the requested tab. If the requested tab does
@@ -124,7 +130,8 @@ impl Editor {
 
                 _ => {
                     // Pass Alt+other keys to the tab to handle (e.g., Alt+Arrow for focus movement)
-                    self.get_current_tab_mut().handle_keystroke(key_event, terminal);
+                    self.get_current_tab_mut()
+                        .handle_keystroke(key_event, terminal);
                 }
             }
         } else {
@@ -149,18 +156,26 @@ impl Editor {
 
                 KeyCode::Backspace => {
                     if self.mode == Mode::Command {
-                        self.command_input.pop();
+                        self.command_bar_content.buffer.backspace();
+                    } else {
+                        self.get_current_tab_mut()
+                            .handle_keystroke(key_event, terminal);
                     }
                 }
 
                 KeyCode::Char(c) => {
                     if self.mode == Mode::Command {
-                        self.command_input.push(c);
+                        self.command_bar_content.buffer.insert(c);
+                    } else {
+                        self.get_current_tab_mut()
+                            .handle_keystroke(key_event, terminal);
                     }
                 }
 
                 // If we can't match here, pass down to the focused tab to deal with.
-                _ => {self.get_current_tab_mut().handle_keystroke(key_event, terminal)}
+                _ => self
+                    .get_current_tab_mut()
+                    .handle_keystroke(key_event, terminal),
             }
         }
     }
@@ -176,6 +191,7 @@ impl Editor {
     /// Scrolls the currently focused view to make sure that the cursor is currently
     /// being shown.
     pub fn ensure_cursor_shown(&mut self, width: usize, height: usize) {
-        self.get_current_tab_mut().ensure_cursor_shown(width, height);
+        self.get_current_tab_mut()
+            .ensure_cursor_shown(width, height);
     }
 }

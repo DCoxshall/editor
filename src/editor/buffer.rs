@@ -18,4 +18,27 @@ impl Buffer {
             cursor_idx: 0,
         }
     }
+
+    pub fn insert(&mut self, c: char) {
+        self.text.insert_char(self.cursor_idx, c);
+        self.cursor_idx += 1;
+    }
+
+    pub fn backspace(&mut self) {
+        if self.cursor_idx != 0 {
+            self.text.remove(self.cursor_idx - 1..self.cursor_idx);
+            self.cursor_idx -= 1;
+        }
+    }
+
+    pub fn delete(&mut self) {
+        if self.cursor_idx != self.text.len_chars() {
+            self.text.remove(self.cursor_idx..self.cursor_idx + 1);
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.text.remove(0..self.text.len_chars());
+        self.cursor_idx = 0;
+    }
 }

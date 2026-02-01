@@ -23,7 +23,8 @@ pub fn render(editor: &Editor, term: &mut Terminal) {
     let (width, height) = term.size();
     let current_tab = editor.get_current_tab();
     let descriptor = UiDescriptor::from_tab(current_tab, width, height);
-    let (cursor_x, cursor_y) = get_visual_cursor_pos(&descriptor, current_tab);
+
+    let (cursor_x, cursor_y) = get_visual_cursor_pos(editor, &descriptor, current_tab, height);
 
     render_active_tab(current_tab, &descriptor, term);
     render_command_bar(editor, term, 0, height - 1, width);
@@ -106,6 +107,10 @@ fn render_view_status_bar(
     width: usize,
     is_focused: bool,
 ) {
+    if !view.has_status_bar {
+        return;
+    }
+
     if width < 1 {
         return;
     }
@@ -113,7 +118,12 @@ fn render_view_status_bar(
     let mut status_bar_vb = VisualBox::new(width, 1);
 
     let mut status_bar_text = String::new();
-    status_bar_text.push_str(view.file_path.to_str().unwrap());
+
+    match &view.file_path {
+        Some(path) => status_bar_text.push_str(path.to_str().unwrap()),
+        None => {}
+    }
+
     status_bar_text.push_str(&" ".repeat(width - status_bar_text.len()));
 
     let status_bar_style = match is_focused {
@@ -140,25 +150,35 @@ fn render_command_bar(editor: &Editor, term: &mut Terminal, x: usize, y: usize, 
     let mut command_input_vb = VisualBox::new(width, 1);
 
     let mut prompt_start = match editor.mode {
-        Mode::Command => String::from("$ "),
-        Mode::Edit => String::from("X "),
+        Mode::Command => String::from(">> "),
+        Mode::Edit => String::from("#> "),
     };
-    prompt_start.push_str(&editor.command_input);
+    prompt_start.push_str(&editor.command_bar_content.buffer.text.to_string());
     command_input_vb.draw(0, 0, &prompt_start);
 
     term.draw_visual_box(x, y, command_input_vb);
 }
 
-fn get_visual_cursor_pos(ui_descriptor: &UiDescriptor, tab: &Tab) -> (usize, usize) {
-    for bound in &ui_descriptor.views {
-        if bound.path == tab.focused_view_path {
-            let view = tab.get_current_focused_view();
-            let (abs_x, abs_y) = view.get_visual_cursor_pos();
-            return (bound.x + abs_x, bound.y + abs_y);
+fn get_visual_cursor_pos(
+    editor: &Editor,
+    ui_descriptor: &UiDescriptor,
+    tab: &Tab,
+    height: usize,
+) -> (usize, usize) {
+    if editor.mode == Mode::Edit {
+        for bound in &ui_descriptor.views {
+            if bound.path == tab.focused_view_path {
+                let view = tab.get_current_focused_view();
+                let (abs_x, abs_y) = view.get_visual_cursor_pos();
+                return (bound.x + abs_x, bound.y + abs_y);
+            }
         }
-    }
 
-    unreachable!(
-        "UiDescriptor::focused_path did not point to an actual path in the focused tab. File a bug report!"
-    );
+        unreachable!(
+            "UiDescriptor::focused_path did not point to an actual path in the focused tab. File a bug report!"
+        );
+    } else {
+        let (cursor_x, cursor_y) = editor.command_bar_content.get_visual_cursor_pos();
+        return (cursor_x + 3, cursor_y + height - 1)
+    }
 }
