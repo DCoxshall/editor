@@ -22,7 +22,7 @@ pub fn render(editor: &Editor, term: &mut Terminal) {
 
     let (width, height) = term.size();
     let current_tab = editor.get_current_tab();
-    let descriptor = UiDescriptor::from_tab(current_tab, width, height);
+    let descriptor = UiDescriptor::from_tab(current_tab, width, height - 1);
 
     let (cursor_x, cursor_y) = get_visual_cursor_pos(editor, &descriptor, current_tab, height);
 
