@@ -67,7 +67,7 @@ impl Editor {
             focused_tab_idx: 0,
             quit: false,
             command_bar_content: View::new(),
-            mode: Mode::Command,
+            mode: Mode::Edit,
         };
 
         new_editor.command_bar_content.has_status_bar = false;

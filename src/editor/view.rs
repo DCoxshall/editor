@@ -180,13 +180,18 @@ impl View {
 
     /// Adjust `self.start_row` and `self.start_col` to ensure the cursor is within the
     /// visual bounds of the view.
+    ///
     pub fn ensure_cursor_shown(&mut self, width: usize, height: usize) {
+        // `view_height` is required because `height` represents the size of the entire focused
+        // View, not the height of the actual viewport.
+        let view_height = height - 1;
+
         let (cursor_x, cursor_y) = self.get_logical_cursor_pos();
         if self.start_col + width <= cursor_x {
             self.start_col = cursor_x - width + 1;
         }
-        if self.start_row + height <= cursor_y {
-            self.start_row = cursor_y - height + 1;
+        if self.start_row + view_height <= cursor_y {
+            self.start_row = cursor_y + 1 - view_height;
         }
         if cursor_x < self.start_col {
             self.start_col = cursor_x;
