@@ -10,7 +10,7 @@ use crate::editor::buffer::Buffer;
 
 pub enum SaveResult {
     Success,
-    NeedsNaming
+    NeedsNaming,
 }
 
 /// Handles visualisation of the text in its buffer. Can be used wherever text needs to
@@ -89,9 +89,15 @@ impl View {
                 self.move_cursor_down();
             }
 
+            KeyCode::End => {
+                self.move_to_end();
+            }
+            KeyCode::Home => {
+                self.move_to_home();
+            }
+
             KeyCode::Char(c) => {
                 if key_event.modifiers.contains(KeyModifiers::ALT) {
-
                 } else {
                     self.buffer.insert(c);
                 }
@@ -100,11 +106,9 @@ impl View {
             KeyCode::Enter => {
                 self.buffer.insert('\n');
             }
-
             KeyCode::Backspace => {
                 self.buffer.backspace();
             }
-
             KeyCode::Delete => {
                 self.buffer.delete();
             }
@@ -112,6 +116,24 @@ impl View {
             // Couldn't match at editor level, tab level, or here, so disregard.
             _ => {}
         }
+    }
+
+    fn move_to_end(&mut self) {
+        let curr_line_idx = self.buffer.text.char_to_line(self.buffer.cursor_idx);
+        let curr_line_len = self.buffer.text.line(curr_line_idx).len_chars();
+        let curr_line_char_idx = self.buffer.text.line_to_char(curr_line_idx);
+        self.buffer.cursor_idx = curr_line_char_idx + curr_line_len - 1;
+
+        // If we're on the very last line, there's no trailing '\n', so we need to stay where we are.
+        if curr_line_len == 0 {
+            self.buffer.cursor_idx += 1;
+        }
+    }
+
+    fn move_to_home(&mut self) {
+        let curr_line_idx = self.buffer.text.char_to_line(self.buffer.cursor_idx);
+        let cur_line_char_idx = self.buffer.text.line_to_char(curr_line_idx);
+        self.buffer.cursor_idx = cur_line_char_idx;
     }
 
     fn move_cursor_right(&mut self) {
@@ -184,9 +206,7 @@ impl View {
 
                 SaveResult::Success
             }
-            None => {
-                SaveResult::NeedsNaming
-            }
+            None => SaveResult::NeedsNaming,
         }
     }
 }
