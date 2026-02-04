@@ -137,7 +137,9 @@ impl View {
     }
 
     fn move_cursor_right(&mut self) {
-        self.buffer.cursor_idx += 1;
+        if self.buffer.cursor_idx != self.buffer.text.len_chars() {
+            self.buffer.cursor_idx += 1;
+        }
     }
 
     fn move_cursor_left(&mut self) {
