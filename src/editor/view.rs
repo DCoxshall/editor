@@ -4,6 +4,8 @@ use std::{
     path::PathBuf,
 };
 
+use unicode_width::UnicodeWidthStr;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::editor::buffer::Buffer;
@@ -64,7 +66,9 @@ impl View {
         }
     }
 
-    fn line_len(&self, line_idx: usize) -> usize {
+    /// Get the logical length of the line. For example, the line "a文" would have a
+    /// logical length of 2.
+    fn logical_line_len(&self, line_idx: usize) -> usize {
         let line = self.buffer.text.line(line_idx);
         if line.to_string().ends_with('\n') {
             return line.len_chars() - 1;
@@ -72,6 +76,19 @@ impl View {
             return line.len_chars() - 2;
         }
         return line.len_chars();
+    }
+
+    /// Get the visual length of the line. For example, the line "a文" would have a
+    /// visual length of 3.
+    fn visual_line_len(&self, line_idx: usize) -> usize {
+        let line = self.buffer.text.line(line_idx).to_string();
+        let mut res = line.width_cjk();
+        if line.ends_with('\n') {
+            res -= 1;
+        } else if line.ends_with("\r\n") {
+            res -= 2;
+        }
+        res
     }
 
     pub fn handle_keystroke(&mut self, key_event: KeyEvent) {
@@ -119,15 +136,10 @@ impl View {
     }
 
     fn move_to_end(&mut self) {
-        let curr_line_idx = self.buffer.text.char_to_line(self.buffer.cursor_idx);
-        let curr_line_len = self.buffer.text.line(curr_line_idx).len_chars();
-        let curr_line_char_idx = self.buffer.text.line_to_char(curr_line_idx);
-        self.buffer.cursor_idx = curr_line_char_idx + curr_line_len - 1;
-
-        // If we're on the very last line, there's no trailing '\n', so we need to stay where we are.
-        if curr_line_len == 0 {
-            self.buffer.cursor_idx += 1;
-        }
+        let (_, row) = self.get_visual_cursor_pos();
+        let line_char_idx = self.buffer.text.line_to_char(row);
+        let curr_line_len = self.logical_line_len(row);
+        self.buffer.cursor_idx = line_char_idx + curr_line_len;
     }
 
     fn move_to_home(&mut self) {
@@ -149,40 +161,56 @@ impl View {
     }
 
     fn move_cursor_up(&mut self) {
-        let (col, line) = self.get_logical_cursor_pos();
-        if line != 0 {
-            let prev_line_len = self.line_len(line - 1);
+        let (init_visual_col, row) = self.get_visual_cursor_pos();
 
-            self.buffer.cursor_idx =
-                self.buffer.text.line_to_char(line - 1) + prev_line_len.min(col);
+        if row != 0 {
+            self.buffer.cursor_idx = self.buffer.text.line_to_char(row - 1);
+            let (mut curr_visual_col, _) = self.get_visual_cursor_pos();
+            while curr_visual_col < init_visual_col
+                && curr_visual_col < self.visual_line_len(row - 1)
+            {
+                self.buffer.cursor_idx += 1;
+                (curr_visual_col, _) = self.get_visual_cursor_pos();
+            }
         }
     }
 
     fn move_cursor_down(&mut self) {
-        let (col, line) = self.get_logical_cursor_pos();
-        if line != self.buffer.text.len_lines() - 1 {
-            let next_line_len = self.line_len(line + 1);
+        let (init_visual_col, row) = self.get_visual_cursor_pos();
 
-            self.buffer.cursor_idx =
-                self.buffer.text.line_to_char(line + 1) + next_line_len.min(col);
+        if row != self.buffer.text.len_lines() - 1 {
+            self.buffer.cursor_idx = self.buffer.text.line_to_char(row + 1);
+            let (mut curr_visual_col, _) = self.get_visual_cursor_pos();
+            while curr_visual_col < init_visual_col
+                && curr_visual_col < self.visual_line_len(row + 1)
+            {
+                self.buffer.cursor_idx += 1;
+                (curr_visual_col, _) = self.get_visual_cursor_pos();
+            }
         }
     }
 
+    /// Returns the location of the cursor relative to the start of the buffer.
     fn get_logical_cursor_pos(&self) -> (usize, usize) {
         let line = self.buffer.text.char_to_line(self.buffer.cursor_idx);
         let col = self.buffer.cursor_idx - self.buffer.text.line_to_char(line);
         (col, line)
     }
 
-    /// Returns the location of the cursor relative to the view's own visual origin.
+    /// Returns the visual position of the cursor relative to the start of the buffer.
     pub fn get_visual_cursor_pos(&self) -> (usize, usize) {
-        let (logical_x, logical_y) = self.get_logical_cursor_pos();
-        (logical_x - self.start_col, logical_y - self.start_row)
+        let (logical_cursor_x, line_idx) = self.get_logical_cursor_pos();
+        let line = self
+            .buffer
+            .text
+            .line(line_idx)
+            .slice(..logical_cursor_x)
+            .to_string();
+        (line.width_cjk(), line_idx)
     }
 
     /// Adjust `self.start_row` and `self.start_col` to ensure the cursor is within the
     /// visual bounds of the view.
-    ///
     pub fn ensure_cursor_shown(&mut self, width: usize, height: usize) {
         // `view_height` is required because `height` represents the size of the entire focused
         // View, not the height of the actual viewport.

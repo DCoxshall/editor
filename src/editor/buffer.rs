@@ -5,7 +5,7 @@ use ropey::Rope;
 pub struct Buffer {
     pub text: Rope,
 
-    /// Index into the chars of self.text.
+    /// Index into the graphemes of self.text.
     pub cursor_idx: usize,
 }
 

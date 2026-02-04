@@ -172,7 +172,10 @@ fn get_visual_cursor_pos(
                 if bound.path == tab.focused_view_path {
                     let view = tab.get_current_focused_view();
                     let (abs_x, abs_y) = view.get_visual_cursor_pos();
-                    return (bound.x + abs_x, bound.y + abs_y);
+                    return (
+                        bound.x + abs_x - view.start_col,
+                        bound.y + abs_y - view.start_row,
+                    );
                 }
             }
 
@@ -181,12 +184,14 @@ fn get_visual_cursor_pos(
             );
         }
         Mode::Command => {
-            let (cursor_x, cursor_y) = editor.command_bar_content.get_visual_cursor_pos();
-            return (cursor_x + 3, cursor_y + height - 1);
+            let view = &editor.command_bar_content;
+            let (cursor_x, cursor_y) = view.get_visual_cursor_pos();
+            return (cursor_x + 3 - view.start_col, cursor_y + height - 1 - view.start_row);
         }
         Mode::NamingFile => {
-            let (cursor_x, cursor_y) = editor.command_bar_content.get_visual_cursor_pos();
-            return (cursor_x + 9, cursor_y + height - 1);
+            let view = &editor.command_bar_content;
+            let (cursor_x, cursor_y) = view.get_visual_cursor_pos();
+            return (cursor_x + 9 - view.start_col, cursor_y + height - 1 - view.start_row);
         }
     }
 }
