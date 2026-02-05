@@ -90,7 +90,7 @@ impl View {
                 if diff == 0 {
                     len += 4;
                 } else {
-                    len += diff;
+                    len += 4 - diff;
                 }
             } else if c == '\n' || c == '\r' {
                 return len;

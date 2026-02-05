@@ -54,11 +54,15 @@ impl VisualBox {
         y * self.width + x
     }
 
+	/// Returns a reference to the styled cell at the location (x, y).
     pub fn at(&self, x: usize, y: usize) -> &StyledCell {
         let idx = self.index(x, y);
         &self.cells[idx]
     }
 
+	/// Draw a string onto the visual box at the given coordinates. `line_col` is used for
+	/// properly rendering tabs - for instance, if you're viewing a file containing
+	/// tabs, but the first column of text is offscreen, line_col should be 1.
     pub fn draw(&mut self, x: usize, y: usize, text: &str, line_col: usize) {
         self.draw_with_style(x, y, text, line_col, reset_style());
     }
@@ -101,11 +105,7 @@ impl VisualBox {
                     }
 
                     let i = self.index(x + dx, y);
-                    self.cells[i].cell = if dx == 0 {
-                        Cell::Grapheme("\t".to_string())
-                    } else {
-                        Cell::Continuation
-                    };
+                    self.cells[i].cell = Cell::Empty;
                     self.cells[i].style = style;
                 }
 
@@ -142,6 +142,7 @@ impl VisualBox {
             }
 
             x += width;
+			line_col += width;
         }
     }
 }
