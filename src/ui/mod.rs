@@ -81,9 +81,9 @@ fn render_view_with_bounds(
                 .chars()
                 .skip(view.start_col)
                 .collect();
-            view_vb.draw(0, visual_line_idx, &line_text);
+            view_vb.draw(0, visual_line_idx, &line_text, view.start_col);
         } else {
-            view_vb.draw(0, visual_line_idx, View::EMPTY_LINE_NOTATION);
+            view_vb.draw(0, visual_line_idx, View::EMPTY_LINE_NOTATION, view.start_col);
         }
     }
 
@@ -141,7 +141,7 @@ fn render_view_status_bar(
         },
     };
 
-    status_bar_vb.draw_with_style(0, 0, &status_bar_text, status_bar_style);
+    status_bar_vb.draw_with_style(0, 0, &status_bar_text, 0, status_bar_style);
 
     term.draw_visual_box(x, y, status_bar_vb);
 }
@@ -155,7 +155,7 @@ fn render_command_bar(editor: &Editor, term: &mut Terminal, x: usize, y: usize, 
         Mode::NamingFile => String::from("save as> "),
     };
     prompt_start.push_str(&editor.command_bar_content.buffer.text.to_string());
-    command_input_vb.draw(0, 0, &prompt_start);
+    command_input_vb.draw(0, 0, &prompt_start, 0);
 
     term.draw_visual_box(x, y, command_input_vb);
 }

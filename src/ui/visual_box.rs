@@ -3,6 +3,8 @@ use crossterm::style::{Attributes, ContentStyle};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
+use crate::editor::view::View;
+
 #[derive(Clone, PartialEq, Debug)]
 pub enum Cell {
     Empty,            // width 1
@@ -57,8 +59,8 @@ impl VisualBox {
         &self.cells[idx]
     }
 
-    pub fn draw(&mut self, x: usize, y: usize, text: &str) {
-        self.draw_with_style(x, y, text, reset_style());
+    pub fn draw(&mut self, x: usize, y: usize, text: &str, line_col: usize) {
+        self.draw_with_style(x, y, text, line_col, reset_style());
     }
 
     pub fn set(&mut self, x: usize, y: usize, cell: &StyledCell) {
@@ -69,7 +71,14 @@ impl VisualBox {
         self.cells[idx] = cell.clone();
     }
 
-    pub fn draw_with_style(&mut self, mut x: usize, y: usize, text: &str, style: ContentStyle) {
+    pub fn draw_with_style(
+        &mut self,
+        mut x: usize,
+        y: usize,
+        text: &str,
+        mut line_col: usize,
+        style: ContentStyle,
+    ) {
         if y >= self.height || x >= self.width {
             return;
         }
@@ -83,6 +92,28 @@ impl VisualBox {
         }
 
         for grapheme in real_text.graphemes(true) {
+            if grapheme == "\t" {
+                let tab_width = View::TAB_WIDTH - (line_col % View::TAB_WIDTH);
+
+                for dx in 0..tab_width {
+                    if x + dx >= self.width {
+                        break;
+                    }
+
+                    let i = self.index(x + dx, y);
+                    self.cells[i].cell = if dx == 0 {
+                        Cell::Grapheme("\t".to_string())
+                    } else {
+                        Cell::Continuation
+                    };
+                    self.cells[i].style = style;
+                }
+
+                x += tab_width;
+                line_col += tab_width;
+                continue;
+            }
+
             let width = UnicodeWidthStr::width(grapheme);
 
             // Combine zero-width graphemes with the previous grapheme.

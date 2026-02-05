@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -37,6 +37,8 @@ pub struct View {
 }
 
 impl View {
+    pub const TAB_WIDTH: usize = 4;
+
     pub const EMPTY_LINE_NOTATION: &str = "~";
     /// Creates a new view from `path`. If the file referred to by `path` can't be found or can't be
     /// read from, returns a `std::io::Error`.
@@ -66,8 +68,8 @@ impl View {
         }
     }
 
-    /// Get the logical length of the line. For example, the line "a文" would have a
-    /// logical length of 2.
+    /// Get the logical length of the line. For example, the line "a文<tab>" would have a
+    /// logical length of 3.
     fn logical_line_len(&self, line_idx: usize) -> usize {
         let line = self.buffer.text.line(line_idx);
         if line.to_string().ends_with('\n') {
@@ -78,17 +80,35 @@ impl View {
         return line.len_chars();
     }
 
-    /// Get the visual length of the line. For example, the line "a文" would have a
-    /// visual length of 3.
+    /// Returns the visual length of the string. Only counts the first line of the
+    /// string i.e. "abc\ndef" is of length 3.
+    fn visual_str_len(&self, string: &str) -> usize {
+        let mut len = 0;
+        for c in string.chars() {
+            if c == '\t' {
+                let diff = len % Self::TAB_WIDTH;
+                if diff == 0 {
+                    len += 4;
+                } else {
+                    len += diff;
+                }
+            } else if c == '\n' || c == '\r' {
+                return len;
+            } else {
+                len += c.width_cjk().unwrap(); // There should never be a control character in a string.
+            }
+        }
+        len
+    }
+
+    /// Get the visual length of the line. For example, the line "a文文<tab>" would have a
+    /// visual length of 8, assuming a tab width of 4.
+    /// Tabs take up as much space as necessary to reach the next multiple of
+    /// Self::TAB_WIDTH. Hence, 'a' has width 1, '文文' has width 4, and <tab> has width
+    /// 3, for a total of 8. This behaviour is based on VSCode's tab insertion behaviour.
     fn visual_line_len(&self, line_idx: usize) -> usize {
         let line = self.buffer.text.line(line_idx).to_string();
-        let mut res = line.width_cjk();
-        if line.ends_with('\n') {
-            res -= 1;
-        } else if line.ends_with("\r\n") {
-            res -= 2;
-        }
-        res
+        self.visual_str_len(&line)
     }
 
     pub fn handle_keystroke(&mut self, key_event: KeyEvent) {
@@ -118,6 +138,10 @@ impl View {
                 } else {
                     self.buffer.insert(c);
                 }
+            }
+
+            KeyCode::Tab => {
+                self.buffer.insert('\t');
             }
 
             KeyCode::Enter => {
@@ -206,7 +230,7 @@ impl View {
             .line(line_idx)
             .slice(..logical_cursor_x)
             .to_string();
-        (line.width_cjk(), line_idx)
+        (self.visual_str_len(&line), line_idx)
     }
 
     /// Adjust `self.start_row` and `self.start_col` to ensure the cursor is within the
