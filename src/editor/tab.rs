@@ -1,6 +1,6 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::editor::view::View;
+use crate::editor::{Editor, view::View};
 use crate::terminal::Terminal;
 use crate::ui::ui_descriptor::UiDescriptor;
 
@@ -60,7 +60,7 @@ impl Tab {
     }
 
     pub fn handle_keystroke(&mut self, key_event: KeyEvent, terminal: &Terminal) {
-        if key_event.modifiers.contains(KeyModifiers::ALT) {
+        if key_event.modifiers.contains(Editor::MOD_KEY_2) {
             let (width, height) = terminal.size();
             match key_event.code {
                 KeyCode::Up => {
@@ -245,7 +245,8 @@ impl Tab {
         let descriptor = UiDescriptor::from_tab(self, width, height - 1);
         for view_bound in descriptor.views {
             if view_bound.path == self.focused_view_path {
-                self.get_current_focused_view_mut().ensure_cursor_shown(view_bound.width, view_bound.height);
+                self.get_current_focused_view_mut()
+                    .ensure_cursor_shown(view_bound.width, view_bound.height);
             }
         }
     }

@@ -4,11 +4,11 @@ use std::{
     path::PathBuf,
 };
 
-use unicode_width::{UnicodeWidthChar};
+use unicode_width::UnicodeWidthChar;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::editor::buffer::Buffer;
+use crate::editor::{Editor, buffer::Buffer};
 
 pub enum SaveResult {
     Success,
@@ -134,8 +134,10 @@ impl View {
             }
 
             KeyCode::Char(c) => {
-                if key_event.modifiers.contains(KeyModifiers::ALT) {
-                } else {
+                // We should only be inserting characters if no key modifiers are pressed.
+                if !(key_event.modifiers.contains(Editor::MOD_KEY_1)
+                    || key_event.modifiers.contains(Editor::MOD_KEY_2))
+                {
                     self.buffer.insert(c);
                 }
             }

@@ -36,6 +36,12 @@ pub struct Editor {
 }
 
 impl Editor {
+    /// MOD_KEY_1 is used for movement and windowing commands.
+    const MOD_KEY_1: KeyModifiers = KeyModifiers::CONTROL;
+
+    /// MOD_KEY_2 is used for editor commands - saving, finding etc.
+    const MOD_KEY_2: KeyModifiers = KeyModifiers::ALT;
+
     /// Creates a new editor from a Vector of relative file paths. If any of the files can't be
     /// opened, this is reported in the status bar and no view is created, unless no file can be
     /// opened, in which case one empty view is created.
@@ -118,7 +124,7 @@ impl Editor {
     }
 
     fn handle_keystroke(&mut self, key_event: KeyEvent, terminal: &Terminal) {
-        if key_event.modifiers.contains(KeyModifiers::ALT) {
+        if key_event.modifiers.contains(Self::MOD_KEY_1) {
             match key_event.code {
                 KeyCode::Char('d') => {
                     self.quit = true;
@@ -134,14 +140,21 @@ impl Editor {
                         self.mode = Mode::NamingFile;
                     }
                 },
-
+				                _ => {
+                    // Pass MOD_KEY_1+other keys to the tab to handle.
+                    self.get_current_tab_mut()
+                        .handle_keystroke(key_event, terminal);
+                }
+            }
+        } else if key_event.modifiers.contains(Self::MOD_KEY_2) {
+            match key_event.code {
                 KeyCode::Char(c) if ('1'..='9').contains(&c) => {
                     let requested_tab = (c as u8 - b'1') as usize;
                     self.set_focused_tab(requested_tab);
                 }
 
                 _ => {
-                    // Pass Alt+other keys to the tab to handle (e.g., Alt+Arrow for focus movement)
+                    // Pass MOD_KEY_2+other keys to the tab to handle (e.g., Alt+Arrow for focus movement)
                     self.get_current_tab_mut()
                         .handle_keystroke(key_event, terminal);
                 }
@@ -157,7 +170,8 @@ impl Editor {
                         self.run_user_command();
                     }
                     Mode::Edit => {
-                        self.get_current_tab_mut().handle_keystroke(key_event, terminal);
+                        self.get_current_tab_mut()
+                            .handle_keystroke(key_event, terminal);
                     }
                     Mode::NamingFile => {
                         let new_name = self.command_bar_content.buffer.text.to_string();
