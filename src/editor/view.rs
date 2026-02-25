@@ -13,6 +13,7 @@ use crate::editor::{Editor, buffer::Buffer};
 pub enum SaveResult {
     Success,
     NeedsNaming,
+	Failure,
 }
 
 /// Handles visualisation of the text in its buffer. Can be used wherever text needs to
@@ -260,7 +261,10 @@ impl View {
     pub fn save(&self) -> SaveResult {
         match &self.file_path {
             Some(path) => {
-                let mut file = File::create(path).unwrap();
+                let mut file = match File::create(path) {
+					Ok(f) => f,
+					Err(_) => return SaveResult::Failure,
+				};
                 for chunk in self.buffer.text.chunks() {
                     file.write_all(chunk.as_bytes()).unwrap();
                 }

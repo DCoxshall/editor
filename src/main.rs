@@ -1,15 +1,13 @@
 mod editor;
 mod terminal;
 mod ui;
+mod fastclock;
 
 use crossterm::terminal::size;
 use editor::Editor;
 use terminal::Terminal;
 
-use std::env;
-use std::io::Result;
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::{env, io::Result, path::PathBuf, str::FromStr};
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();

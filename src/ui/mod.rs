@@ -22,7 +22,14 @@ pub fn render(editor: &Editor, term: &mut Terminal) {
 
     let (width, height) = term.size();
     let current_tab = editor.get_current_tab();
-    let descriptor = UiDescriptor::from_tab(current_tab, width, height - 1);
+
+    let descriptor = match &editor.prompt_contents {
+        Some(text) => {
+            render_prompt(text.clone(), term, width, height);
+            UiDescriptor::from_tab(current_tab, width, height - 2)
+        }
+        None => UiDescriptor::from_tab(current_tab, width, height - 1),
+    };
 
     let (cursor_x, cursor_y) = get_visual_cursor_pos(editor, &descriptor, current_tab, height);
 
@@ -83,7 +90,12 @@ fn render_view_with_bounds(
                 .collect();
             view_vb.draw(0, visual_line_idx, &line_text, view.start_col);
         } else {
-            view_vb.draw(0, visual_line_idx, View::EMPTY_LINE_NOTATION, view.start_col);
+            view_vb.draw(
+                0,
+                visual_line_idx,
+                View::EMPTY_LINE_NOTATION,
+                view.start_col,
+            );
         }
     }
 
@@ -149,15 +161,22 @@ fn render_view_status_bar(
 fn render_command_bar(editor: &Editor, term: &mut Terminal, x: usize, y: usize, width: usize) {
     let mut command_input_vb = VisualBox::new(width, 1);
 
-    let mut prompt_start = match editor.mode {
+    let mut prompt_start = match &editor.mode {
         Mode::Command => String::from(">> "),
         Mode::Edit => String::from("#> "),
-        Mode::NamingFile => String::from("save as> "),
+        Mode::Prompt => String::from(">> "),
     };
+
     prompt_start.push_str(&editor.command_bar_content.buffer.text.to_string());
     command_input_vb.draw(0, 0, &prompt_start, 0);
 
     term.draw_visual_box(x, y, command_input_vb);
+}
+
+fn render_prompt(prompt_text: String, term: &mut Terminal, width: usize, height: usize) {
+    let mut prompt_vb = VisualBox::new(width, 1);
+    prompt_vb.draw(0, 0, &prompt_text, 0);
+    term.draw_visual_box(0, height -2 , prompt_vb);
 }
 
 fn get_visual_cursor_pos(
@@ -186,12 +205,18 @@ fn get_visual_cursor_pos(
         Mode::Command => {
             let view = &editor.command_bar_content;
             let (cursor_x, cursor_y) = view.get_visual_cursor_pos();
-            return (cursor_x + 3 - view.start_col, cursor_y + height - 1 - view.start_row);
+            return (
+                cursor_x + 3 - view.start_col,
+                cursor_y + height - 1 - view.start_row,
+            );
         }
-        Mode::NamingFile => {
+        Mode::Prompt => {
             let view = &editor.command_bar_content;
             let (cursor_x, cursor_y) = view.get_visual_cursor_pos();
-            return (cursor_x + 9 - view.start_col, cursor_y + height - 1 - view.start_row);
+            return (
+                cursor_x + 3 - view.start_col,
+                cursor_y + height - 1 - view.start_row,
+            );
         }
     }
 }
