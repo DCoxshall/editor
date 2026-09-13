@@ -5,20 +5,18 @@ pub mod view;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use std::{
     path::PathBuf,
-    str::FromStr,
     time::{self, Duration, Instant},
 };
 
-use crate::fastclock::FastClock;
+use crate::editor::tab::Tab;
 use crate::editor::view::View;
-use crate::editor::{tab::Tab, view::SaveResult};
+use crate::fastclock::FastClock;
 use crate::terminal::Terminal;
 
 #[derive(PartialEq)]
 pub enum Mode {
     Command,
     Edit,
-    Prompt,
 }
 
 /// Main editor data structure.
@@ -176,12 +174,8 @@ impl Editor {
                     .get_current_focused_view_mut()
                     .save()
                 {
-                    SaveResult::Success => {}
-                    SaveResult::Failure => {self.set_prompt("Saving didn't work!")}
-                    SaveResult::NeedsNaming => {
-                        self.set_prompt("Name your new file:");
-                        self.mode = Mode::Prompt;
-                    }
+                    Ok(_) => {}
+                    Err(e) => self.set_prompt(&e),
                 },
                 _ => {
                     // Pass MOD_KEY_1+other keys to the tab to handle.
@@ -217,15 +211,6 @@ impl Editor {
                         self.get_current_tab_mut()
                             .handle_keystroke(key_event, terminal);
                     }
-                    Mode::Prompt => {
-                        let new_name = self.command_bar_content.buffer.text.to_string();
-                        let current_view =
-                            self.get_current_tab_mut().get_current_focused_view_mut();
-                        current_view.file_path = Some(PathBuf::from_str(&new_name).unwrap());
-                        current_view.save();
-                        self.mode = Mode::Edit;
-                        self.command_bar_content.buffer.clear();
-                    }
                 },
 
                 KeyCode::F(1) => match self.mode {
@@ -235,14 +220,10 @@ impl Editor {
                     Mode::Edit => {
                         self.mode = Mode::Command;
                     }
-                    Mode::Prompt => {
-                        self.command_bar_content.buffer.clear();
-                        self.mode = Mode::Edit;
-                    }
                 },
 
                 KeyCode::Backspace => match self.mode {
-                    Mode::Command | Mode::Prompt => {
+                    Mode::Command => {
                         self.command_bar_content.buffer.backspace();
                     }
                     Mode::Edit => self
@@ -251,7 +232,7 @@ impl Editor {
                 },
 
                 KeyCode::Char(c) => match self.mode {
-                    Mode::Command | Mode::Prompt => {
+                    Mode::Command => {
                         self.command_bar_content.buffer.insert(c);
                     }
                     Mode::Edit => {

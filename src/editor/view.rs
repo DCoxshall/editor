@@ -258,20 +258,20 @@ impl View {
         }
     }
 
-    pub fn save(&self) -> SaveResult {
+    pub fn save(&self) -> Result<(), String> {
         match &self.file_path {
             Some(path) => {
                 let mut file = match File::create(path) {
 					Ok(f) => f,
-					Err(_) => return SaveResult::Failure,
+					Err(_) => return Err(String::from("Could not open file.")),
 				};
                 for chunk in self.buffer.text.chunks() {
                     file.write_all(chunk.as_bytes()).unwrap();
                 }
 
-                SaveResult::Success
+                Ok(())
             }
-            None => SaveResult::NeedsNaming,
+            None => Err(String::from("File has no name.")),
         }
     }
 }

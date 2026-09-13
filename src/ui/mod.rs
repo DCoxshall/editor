@@ -164,7 +164,6 @@ fn render_command_bar(editor: &Editor, term: &mut Terminal, x: usize, y: usize, 
     let mut prompt_start = match &editor.mode {
         Mode::Command => String::from(">> "),
         Mode::Edit => String::from("#> "),
-        Mode::Prompt => String::from(">> "),
     };
 
     prompt_start.push_str(&editor.command_bar_content.buffer.text.to_string());
@@ -203,14 +202,6 @@ fn get_visual_cursor_pos(
             );
         }
         Mode::Command => {
-            let view = &editor.command_bar_content;
-            let (cursor_x, cursor_y) = view.get_visual_cursor_pos();
-            return (
-                cursor_x + 3 - view.start_col,
-                cursor_y + height - 1 - view.start_row,
-            );
-        }
-        Mode::Prompt => {
             let view = &editor.command_bar_content;
             let (cursor_x, cursor_y) = view.get_visual_cursor_pos();
             return (
