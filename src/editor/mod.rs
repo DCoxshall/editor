@@ -3,15 +3,11 @@ pub mod tab;
 pub mod view;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use std::{
-    path::PathBuf,
-    time::{self, Duration, Instant},
-};
+use std::path::PathBuf;
 
-use crate::editor::tab::Tab;
-use crate::editor::view::View;
-use crate::fastclock::FastClock;
 use crate::terminal::Terminal;
+use crate::{command::Command, editor::view::View};
+use crate::{command::command_bar::CommandBar, editor::tab::Tab};
 
 #[derive(PartialEq)]
 pub enum Mode {
@@ -21,33 +17,23 @@ pub enum Mode {
 
 /// Main editor data structure.
 pub struct Editor {
-    /// Vector of tabs - each one represents zero or more open views - think like a
-    /// browser tab.
+    /// Vector of tabs - each one represents zero or more open views - think
+    /// like a browser tab.
     pub tabs: Vec<Tab>,
 
-    /// Index into `Self::tabs`. There is always at least one tab, even if that tab is
-    /// empty.
+    /// Index into `Self::tabs`. There is always at least one tab, even if that
+    /// tab is empty.
     pub focused_tab_idx: usize,
 
     /// Represents whether the editor should quit on the next `mainloop`.
     pub quit: bool,
 
-    /// Represents the command that the user is currently typing. Will be displayed in
-    /// the command bar.
-    pub command_bar_content: View,
-
-    /// Represents the string that should be displayed as the current prompt for the user.
-    pub prompt_contents: Option<String>,
+    /// Represents the command that the user is currently typing. Will be
+    /// displayed in the command bar.
+    pub command_bar: CommandBar,
 
     /// Represents which mode the editor is currently in.
     pub mode: Mode,
-
-    /// Clock, which can be used to time how long since the editor was instantiated, as
-    /// well as measure instants (see Self::prompt_timer).
-    pub clock: FastClock,
-
-    /// The instant at which the prompt was last set.
-    pub prompt_timer: Option<Instant>,
 }
 
 impl Editor {
@@ -57,14 +43,13 @@ impl Editor {
     /// MOD_KEY_2 is used for editor commands - saving, finding etc.
     const MOD_KEY_2: KeyModifiers = KeyModifiers::ALT;
 
-    const PROMPT_TIMEOUT: Duration = Duration::from_secs(3);
-
-    /// Creates a new editor from a Vector of relative file paths. If any of the files
-    /// can't be opened, this is reported in the status bar and no view is created,
-    /// unless no file can be opened, in which case one empty view is created.
+    /// Creates a new editor from a Vector of relative file paths. If any of the
+    /// files can't be opened, this is reported in the status bar and no view is
+    /// created, unless no file can be opened, in which case one empty view is
+    /// created.
     /// # Arguments
-    /// * `paths: Vec<PathBuf>`: Paths to each file the user is attempting to open. Each
-    ///   path is relative to the current working directory.
+    /// * `paths: Vec<PathBuf>`: Paths to each file the user is attempting to
+    ///   open. Each path is relative to the current working directory.
     pub fn from_paths(paths: Vec<PathBuf>) -> Self {
         let mut views: Vec<View> = vec![];
 
@@ -85,18 +70,14 @@ impl Editor {
             tabs.push(Tab::new());
         }
 
-        let mut new_editor = Editor {
+        let new_editor = Editor {
             tabs: tabs,
             focused_tab_idx: 0,
             quit: false,
-            command_bar_content: View::new(),
-            prompt_contents: None,
+            command_bar: CommandBar::new(),
             mode: Mode::Edit,
-            clock: FastClock::new(),
-            prompt_timer: Some(time::Instant::now()),
         };
 
-        new_editor.command_bar_content.has_status_bar = false;
         return new_editor;
     }
 
@@ -110,73 +91,45 @@ impl Editor {
 
             _ => {}
         }
-
-        self.update_prompt();
     }
 
-    fn update_prompt(&mut self) {
-        match self.prompt_timer {
-            Some(t) => {
-                let now = self.clock.now();
-                if now - Self::PROMPT_TIMEOUT > t {
-                    self.prompt_contents = None;
-                }
-            }
-            None => return,
-        }
+    /// Runs the command currently stored in `self.command_input`. Clears the
+    /// command input after running.
+    fn attempt_to_run_command(&mut self) {
+        // Attempt to create a command from the text that's currently in the
+        // command bar. If this succeeds, we simply apply the command to the
+        // editor. If we can't successfully parse a command from the command
+        // bar, we warn the user why.
+        match self.command_bar.parse_command() {
+            Ok(mut command) => command.apply(self),
+            Err(e) => self.show_warning(&e),
+        };
     }
 
-    /// Runs the command currently stored in `self.command_input`. Clears the command
-    /// input after running.
-    fn run_user_command(&mut self) {
-        let command = self.command_bar_content.buffer.text.to_string();
-        if command == String::from("quit") {
-            self.quit = true;
-        } else if let Some(filename) = command.strip_prefix("hsplit") {
-            let filename = filename.trim_start();
-            let pathbuf = PathBuf::from(filename);
-            let view = View::from_path(pathbuf).unwrap();
-            self.get_current_tab_mut()
-                .insert_new_view(view, tab::Axis::Horizontal);
-        } else if let Some(filename) = command.strip_prefix("vsplit") {
-            let filename = filename.trim_start();
-            let pathbuf = PathBuf::from(filename);
-            let view = View::from_path(pathbuf).unwrap();
-            self.get_current_tab_mut()
-                .insert_new_view(view, tab::Axis::Vertical);
-        }
-
-        self.command_bar_content.buffer.clear();
-    }
-
-    // Changes the focused tab to the requested tab. If the requested tab does not
-    // exist, pass silently.
+    // Changes the focused tab to the requested tab. If the requested tab does
+    // not exist, pass silently.
     fn set_focused_tab(&mut self, requested_tab: usize) {
         if requested_tab < self.tabs.len() {
             self.focused_tab_idx = requested_tab;
         }
     }
 
-    fn set_prompt(&mut self, s: &str) {
-        self.prompt_contents = Some(s.to_string());
-        self.prompt_timer = Some(Instant::now());
+    /// Set the contents of the command bar to the given warning text.
+    pub fn show_warning(&mut self, warning_text: &str) {
+        self.command_bar.set_contents(warning_text);
     }
 
     fn handle_keystroke(&mut self, key_event: KeyEvent, terminal: &Terminal) {
         if key_event.modifiers.contains(Self::MOD_KEY_1) {
             match key_event.code {
-                KeyCode::Char('d') => {
-                    self.quit = true;
+                KeyCode::Char('d') => Command::quit(self),
+
+                KeyCode::Char('s') => {
+                    // Typing Ctrl-S is equivalent to running the `save` command
+                    // (with no arguments).
+                    Command::save_no_args(self);
                 }
 
-                KeyCode::Char('s') => match self
-                    .get_current_tab_mut()
-                    .get_current_focused_view_mut()
-                    .save()
-                {
-                    Ok(_) => {}
-                    Err(e) => self.set_prompt(&e),
-                },
                 _ => {
                     // Pass MOD_KEY_1+other keys to the tab to handle.
                     self.get_current_tab_mut()
@@ -191,21 +144,19 @@ impl Editor {
                 }
 
                 _ => {
-                    // Pass MOD_KEY_2+other keys to the tab to handle (e.g., Alt+Arrow
-                    // for focus movement)
+                    // Pass MOD_KEY_2+other keys to the tab to handle (e.g.,
+                    // Alt+Arrow for focus movement)
                     self.get_current_tab_mut()
                         .handle_keystroke(key_event, terminal);
                 }
             }
         } else {
             match key_event.code {
-                KeyCode::F(10) => {
-                    self.quit = true;
-                }
+                KeyCode::F(10) => Command::quit(self),
 
                 KeyCode::Enter => match self.mode {
                     Mode::Command => {
-                        self.run_user_command();
+                        self.attempt_to_run_command();
                     }
                     Mode::Edit => {
                         self.get_current_tab_mut()
@@ -213,18 +164,19 @@ impl Editor {
                     }
                 },
 
-                KeyCode::F(1) => match self.mode {
+                KeyCode::F(1) | KeyCode::Esc => match self.mode {
                     Mode::Command => {
                         self.mode = Mode::Edit;
                     }
                     Mode::Edit => {
                         self.mode = Mode::Command;
+                        self.command_bar.clear();
                     }
                 },
 
                 KeyCode::Backspace => match self.mode {
                     Mode::Command => {
-                        self.command_bar_content.buffer.backspace();
+                        self.command_bar.view.buffer.backspace();
                     }
                     Mode::Edit => self
                         .get_current_tab_mut()
@@ -233,7 +185,7 @@ impl Editor {
 
                 KeyCode::Char(c) => match self.mode {
                     Mode::Command => {
-                        self.command_bar_content.buffer.insert(c);
+                        self.command_bar.view.buffer.insert(c);
                     }
                     Mode::Edit => {
                         self.get_current_tab_mut()
@@ -241,24 +193,33 @@ impl Editor {
                     }
                 },
 
-                // If we can't match here, pass down to the focused tab to deal with.
-                _ => self
-                    .get_current_tab_mut()
-                    .handle_keystroke(key_event, terminal),
+                // If we're in Command mode and we haven't been able to match
+                // the keystroke at this level, we need to let the command bar
+                // handle this keystroke. Otherwise, we let the currently
+                // focused tab handle it.
+                _ => match self.mode {
+                    Mode::Command => self.command_bar.handle_keystroke(key_event),
+                    Mode::Edit => {
+                        self.get_current_tab_mut()
+                            .handle_keystroke(key_event, terminal);
+                    }
+                },
             }
         }
     }
 
+    /// Get a mutable reference to the currently focused tab.
     pub fn get_current_tab_mut(&mut self) -> &mut Tab {
         return &mut self.tabs[self.focused_tab_idx];
     }
 
+    /// Get a reference to the currently focused tab.
     pub fn get_current_tab(&self) -> &Tab {
         return &self.tabs[self.focused_tab_idx];
     }
 
-    /// Scrolls the currently focused view to make sure that the cursor is currently
-    /// being shown.
+    /// Scrolls the currently focused view to make sure that the cursor is
+    /// currently being shown.
     pub fn ensure_cursor_shown(&mut self, width: usize, height: usize) {
         self.get_current_tab_mut()
             .ensure_cursor_shown(width, height);

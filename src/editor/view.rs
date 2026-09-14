@@ -10,12 +10,6 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::editor::{Editor, buffer::Buffer};
 
-pub enum SaveResult {
-    Success,
-    NeedsNaming,
-	Failure,
-}
-
 /// Handles visualisation of the text in its buffer. Can be used wherever text needs to
 /// be rendered to the screen, for example the text in a file, or the text in the
 /// command bar.
@@ -57,8 +51,7 @@ impl View {
         })
     }
 
-    /// Creates a new empty view. The user can write in an empty view. Upon attempting to save, the
-    /// editor should prompt them for a filename, which the view will be saved to.
+    /// Creates a new empty view.
     pub fn new() -> Self {
         Self {
             buffer: Buffer::new(String::from("")),
@@ -263,7 +256,7 @@ impl View {
             Some(path) => {
                 let mut file = match File::create(path) {
 					Ok(f) => f,
-					Err(_) => return Err(String::from("Could not open file.")),
+					Err(_) => return Err(String::from("Error: File could not be opened for writing.")),
 				};
                 for chunk in self.buffer.text.chunks() {
                     file.write_all(chunk.as_bytes()).unwrap();
@@ -271,7 +264,7 @@ impl View {
 
                 Ok(())
             }
-            None => Err(String::from("File has no name.")),
+            None => panic!("Attempted to save a View without a name."),
         }
     }
 }

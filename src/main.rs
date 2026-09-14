@@ -1,7 +1,7 @@
 mod editor;
 mod terminal;
 mod ui;
-mod fastclock;
+mod command;
 
 use crossterm::terminal::size;
 use editor::Editor;
