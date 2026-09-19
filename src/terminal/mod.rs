@@ -1,6 +1,6 @@
 use crossterm::{
     cursor::{self, Hide, Show},
-    event::{self, Event},
+    event::{self, DisableBracketedPaste, EnableBracketedPaste, Event},
     execute, queue,
     style::SetStyle,
     terminal::{self, ClearType, disable_raw_mode, size},
@@ -32,6 +32,7 @@ impl Terminal {
         let (width, height) = size()?;
         terminal::enable_raw_mode()?;
         execute!(stdout(), terminal::EnterAlternateScreen)?;
+        execute!(stdout(), EnableBracketedPaste)?;
         Ok(Self {
             stdout: stdout(),
             visual_box: VisualBox::new(width as usize, height as usize),
@@ -53,12 +54,13 @@ impl Terminal {
     pub fn cleanup(&mut self) -> Result<(), std::io::Error> {
         self.clear();
         execute!(self.stdout, terminal::LeaveAlternateScreen)?;
+        execute!(stdout(), DisableBracketedPaste)?;
         disable_raw_mode()?;
         self.show_cursor();
         Ok(())
     }
 
-    pub fn size(&self) -> (usize, usize) {
+    pub fn size() -> (usize, usize) {
         let (w, h) = terminal::size().unwrap();
         (w as usize, h as usize)
     }

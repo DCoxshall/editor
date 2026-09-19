@@ -24,7 +24,7 @@ pub struct VisualBox {
     cells: Vec<StyledCell>,
 }
 
-fn reset_style() -> ContentStyle {
+pub fn reset_style() -> ContentStyle {
     ContentStyle {
         foreground_color: Some(Color::Reset),
         background_color: Some(Color::Reset),
@@ -54,19 +54,71 @@ impl VisualBox {
         y * self.width + x
     }
 
-	/// Returns a reference to the styled cell at the location (x, y).
+    /// Returns a reference to the styled cell at the location (x, y).
     pub fn at(&self, x: usize, y: usize) -> &StyledCell {
         let idx = self.index(x, y);
         &self.cells[idx]
     }
 
-	/// Draw a string onto the visual box at the given coordinates. `line_col` is used for
-	/// properly rendering tabs - for instance, if you're viewing a file containing
-	/// tabs, but the first column of text is offscreen, line_col should be 1.
+    /// Draw a string onto the visual box at the given coordinates. `line_col` is used for
+    /// properly rendering tabs - for instance, if you're viewing a file containing
+    /// tabs, but the first column of text is offscreen, line_col should be 1.
     pub fn draw(&mut self, x: usize, y: usize, text: &str, line_col: usize) {
         self.draw_with_style(x, y, text, line_col, reset_style());
     }
 
+    /// Draws a single grapheme at the given coordinates.
+    pub fn draw_grapheme(
+        &mut self,
+        x: usize,
+        y: usize,
+        grapheme: &str,
+        line_col: usize,
+        style: ContentStyle,
+    ) {
+        if grapheme == "\t" {
+            let tab_width = View::TAB_WIDTH - (line_col % View::TAB_WIDTH);
+            for dx in 0..tab_width {
+                if x + dx >= self.width {
+                    break;
+                }
+
+                let i = self.index(x + dx, y);
+                self.cells[i].cell = Cell::Empty;
+                self.cells[i].style = style;
+            }
+            return;
+        }
+
+        let width = UnicodeWidthStr::width(grapheme);
+
+        // Combine zero-width graphemes with the previous grapheme.
+        if width == 0 {
+            if x > 0 {
+                let i = self.index(x - 1, y);
+                if let Cell::Grapheme(g) = &mut self.cells[i].cell {
+                    g.push_str(grapheme);
+                }
+            }
+            return;
+        }
+
+        // If it won't fit, stop drawing.
+        if x + width > self.width {
+            return;
+        }
+
+        // Write the grapheme to self.cells.
+        let i = self.index(x, y);
+        self.cells[i].cell = Cell::Grapheme(grapheme.to_string());
+        self.cells[i].style = style;
+        for dx in 1..width {
+            self.cells[i + dx].cell = Cell::Continuation;
+            self.cells[i + dx].style = style;
+        }
+    }
+
+    /// Writes a single `StyledCell` to the given coordinates in `self`.
     pub fn set(&mut self, x: usize, y: usize, cell: &StyledCell) {
         let idx = self.index(x, y);
         if idx >= self.cells.len() {
@@ -96,53 +148,11 @@ impl VisualBox {
         }
 
         for grapheme in real_text.graphemes(true) {
-            if grapheme == "\t" {
-                let tab_width = View::TAB_WIDTH - (line_col % View::TAB_WIDTH);
-
-                for dx in 0..tab_width {
-                    if x + dx >= self.width {
-                        break;
-                    }
-
-                    let i = self.index(x + dx, y);
-                    self.cells[i].cell = Cell::Empty;
-                    self.cells[i].style = style;
-                }
-
-                x += tab_width;
-                line_col += tab_width;
-                continue;
-            }
-
             let width = UnicodeWidthStr::width(grapheme);
-
-            // Combine zero-width graphemes with the previous grapheme.
-            if width == 0 {
-                if x > 0 {
-                    let i = self.index(x - 1, y);
-                    if let Cell::Grapheme(g) = &mut self.cells[i].cell {
-                        g.push_str(grapheme);
-                    }
-                }
-                continue;
-            }
-
-            // If it won't fit, stop drawing.
-            if x + width > self.width {
-                break;
-            }
-
-            // Write the grapheme to self.cells.
-            let i = self.index(x, y);
-            self.cells[i].cell = Cell::Grapheme(grapheme.to_string());
-            self.cells[i].style = style;
-            for dx in 1..width {
-                self.cells[i + dx].cell = Cell::Continuation;
-                self.cells[i + dx].style = style;
-            }
+            self.draw_grapheme(x, y, grapheme, line_col, style);
 
             x += width;
-			line_col += width;
+            line_col += width;
         }
     }
 }

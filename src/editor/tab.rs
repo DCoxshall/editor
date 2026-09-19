@@ -1,17 +1,18 @@
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::editor::{Editor, view::View};
+use crate::editor::{Editor, selection::Selection, view::View};
 use crate::terminal::Terminal;
 use crate::ui::ui_descriptor::UiDescriptor;
 
 /// Is the given split a horizontal or vertical split?
+#[derive(Clone)]
 pub enum Axis {
     Horizontal,
     Vertical,
 }
 
 /// Represents the four cardinal directions for focus movement
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum Direction {
     Up,
     Down,
@@ -31,6 +32,26 @@ pub enum Layout {
         weight: f32,
         children: [Box<Layout>; 2],
     },
+}
+
+impl Layout {
+    pub fn views(&self) -> impl Iterator<Item = &View> {
+        let mut stack = vec![self];
+
+        std::iter::from_fn(move || {
+            while let Some(layout) = stack.pop() {
+                match layout {
+                    Layout::Leaf(view) => return Some(view),
+                    Layout::Split { children, .. } => {
+                        stack.push(&children[1]);
+                        stack.push(&children[0]);
+                    }
+                }
+            }
+
+            None
+        })
+    }
 }
 
 /// A tab contains one or more views, representing a logical collection of views. The user can swap
@@ -59,21 +80,24 @@ impl Tab {
         }
     }
 
-    pub fn handle_keystroke(&mut self, key_event: KeyEvent, terminal: &Terminal) {
+    pub fn views(&self) -> impl Iterator<Item = &View> {
+        self.layout.views()
+    }
+
+    pub fn handle_keystroke(&mut self, key_event: KeyEvent) {
         if key_event.modifiers.contains(Editor::MOD_KEY_2) {
-            let (width, height) = terminal.size();
             match key_event.code {
                 KeyCode::Up => {
-                    self.move_focus_direction(Direction::Up, width, height);
+                    self.move_focus_direction(Direction::Up);
                 }
                 KeyCode::Down => {
-                    self.move_focus_direction(Direction::Down, width, height);
+                    self.move_focus_direction(Direction::Down);
                 }
                 KeyCode::Left => {
-                    self.move_focus_direction(Direction::Left, width, height);
+                    self.move_focus_direction(Direction::Left);
                 }
                 KeyCode::Right => {
-                    self.move_focus_direction(Direction::Right, width, height);
+                    self.move_focus_direction(Direction::Right);
                 }
                 _ => {
                     // If Alt is held but it's not a focus movement key, pass to view
@@ -88,7 +112,7 @@ impl Tab {
         }
     }
 
-    pub fn insert_new_view(&mut self, new_view: View, direction: Axis) {
+    pub fn insert_new_view(&mut self, new_view: View, direction: Axis, is_upper_or_left: bool) {
         let focused_leaf = self.get_focused_leaf_mut();
 
         let old_view = match focused_leaf {
@@ -96,16 +120,26 @@ impl Tab {
             _ => unreachable!(),
         };
 
-        *focused_leaf = Layout::Split {
-            axis: direction,
-            weight: 0.5,
-            children: [
+        let children = match is_upper_or_left {
+            true => [
+                Box::new(Layout::Leaf(new_view)),
+                Box::new(Layout::Leaf(old_view)),
+            ],
+            false => [
                 Box::new(Layout::Leaf(old_view)),
                 Box::new(Layout::Leaf(new_view)),
             ],
         };
 
-        self.focused_view_path.push(false);
+        *focused_leaf = Layout::Split {
+            axis: direction,
+            weight: 0.5,
+            children,
+        };
+
+        // If we've added a new view to the old view's left (for example), push `false` onto the
+        // focused view path so that we focus the newly created view.
+        self.focused_view_path.push(!is_upper_or_left);
     }
 
     pub fn get_focused_view_path(&self) -> &Vec<bool> {
@@ -202,9 +236,10 @@ impl Tab {
 
     /// Move the focus to the view which is in the corresponding direction of the current focused
     /// view.
-    fn move_focus_direction(&mut self, direction: Direction, width: usize, height: usize) -> bool {
+    pub fn move_focus_direction(&mut self, direction: Direction) -> bool {
+        let (width, height) = Terminal::size();
         let descriptor = UiDescriptor::from_tab(self, width, height);
-
+        let (width, height) = Terminal::size();
         // Find the currently focused view's bounds.
         let cur_bounds = descriptor
             .views

@@ -1,14 +1,14 @@
 use std::{
-    fs::{File, read_to_string},
-    io::Write,
+    fs::{OpenOptions, read_to_string},
+    io::{ErrorKind, Write},
     path::PathBuf,
 };
 
 use unicode_width::UnicodeWidthChar;
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::editor::{Editor, buffer::Buffer};
+use crate::editor::{Editor, buffer::Buffer, selection::Selection};
 
 /// Handles visualisation of the text in its buffer. Can be used wherever text needs to
 /// be rendered to the screen, for example the text in a file, or the text in the
@@ -29,25 +29,35 @@ pub struct View {
 
     pub start_row: usize,
     pub start_col: usize,
+
+    /// Represents whether this view has been edited since it was last saved to disk.
+    pub dirty: bool,
+
+    pub selection: Selection,
 }
 
 impl View {
     pub const TAB_WIDTH: usize = 4;
 
     pub const EMPTY_LINE_NOTATION: &str = "~";
-    /// Creates a new view from `path`. If the file referred to by `path` can't be found or can't be
-    /// read from, returns a `std::io::Error`.
-    /// # Arguments
-    /// * `path: PathBuf`: a relative file path. If the path cannot be read from, we return an error
-    ///   - otherwise, we read from the file and create a new buffer.
+
+    /// Creates a new `View` from a `PathBuf`. If `path` does not exist, we return an empty `View`
+    /// with `path` as its `file_path`. If `path` exists but cannot be read, we return an error.
     pub fn from_path(path: PathBuf) -> Result<Self, std::io::Error> {
-        let text = read_to_string(&path)?;
+        let buffer = match read_to_string(&path) {
+            Ok(text) => Buffer::new(text),
+            Err(e) if e.kind() == ErrorKind::NotFound => Buffer::empty(),
+            Err(e) => return Err(e),
+        };
+
         Ok(View {
-            buffer: Buffer::new(text),
+            buffer,
             file_path: Some(path),
+            has_status_bar: true,
             start_row: 0,
             start_col: 0,
-            has_status_bar: true,
+            dirty: false,
+            selection: Selection::new(),
         })
     }
 
@@ -59,6 +69,8 @@ impl View {
             start_row: 0,
             start_col: 0,
             has_status_bar: true,
+            dirty: false,
+            selection: Selection::new(),
         }
     }
 
@@ -106,25 +118,26 @@ impl View {
     }
 
     pub fn handle_keystroke(&mut self, key_event: KeyEvent) {
+        let is_shift_held = key_event.modifiers.contains(KeyModifiers::SHIFT);
         match key_event.code {
             KeyCode::Left => {
-                self.move_cursor_left();
+                self.move_cursor_left(is_shift_held);
             }
             KeyCode::Right => {
-                self.move_cursor_right();
+                self.move_cursor_right(is_shift_held);
             }
             KeyCode::Up => {
-                self.move_cursor_up();
+                self.move_cursor_up(is_shift_held);
             }
             KeyCode::Down => {
-                self.move_cursor_down();
+                self.move_cursor_down(is_shift_held);
             }
 
             KeyCode::End => {
-                self.move_to_end();
+                self.move_to_end(is_shift_held);
             }
             KeyCode::Home => {
-                self.move_to_home();
+                self.move_to_home(is_shift_held);
             }
 
             KeyCode::Char(c) => {
@@ -134,20 +147,25 @@ impl View {
                 {
                     self.buffer.insert(c);
                 }
+                self.dirty = true;
             }
 
             KeyCode::Tab => {
                 self.buffer.insert('\t');
+                self.dirty = true;
             }
 
             KeyCode::Enter => {
                 self.buffer.insert('\n');
+                self.dirty = true;
             }
             KeyCode::Backspace => {
                 self.buffer.backspace();
+                self.dirty = true;
             }
             KeyCode::Delete => {
                 self.buffer.delete();
+                self.dirty = true;
             }
 
             // Couldn't match at editor level, tab level, or here, so disregard.
@@ -155,32 +173,53 @@ impl View {
         }
     }
 
-    fn move_to_end(&mut self) {
+    fn update_selection(&mut self, is_shift_held: bool) {
+        if is_shift_held {
+            if !self.selection.active {
+                self.selection.active = true;
+                self.selection.anchor = self.buffer.cursor_idx;
+            }
+        } else {
+            self.selection.active = false;
+        }
+    }
+
+    fn move_to_end(&mut self, is_shift_held: bool) {
+        self.update_selection(is_shift_held);
+
         let (_, row) = self.get_visual_cursor_pos();
         let line_char_idx = self.buffer.text.line_to_char(row);
         let curr_line_len = self.logical_line_len(row);
         self.buffer.cursor_idx = line_char_idx + curr_line_len;
     }
 
-    fn move_to_home(&mut self) {
+    fn move_to_home(&mut self, is_shift_held: bool) {
+        self.update_selection(is_shift_held);
+        
         let curr_line_idx = self.buffer.text.char_to_line(self.buffer.cursor_idx);
         let cur_line_char_idx = self.buffer.text.line_to_char(curr_line_idx);
         self.buffer.cursor_idx = cur_line_char_idx;
     }
 
-    fn move_cursor_right(&mut self) {
+    fn move_cursor_right(&mut self, is_shift_held: bool) {
+        self.update_selection(is_shift_held);
+
         if self.buffer.cursor_idx != self.buffer.text.len_chars() {
             self.buffer.cursor_idx += 1;
         }
     }
 
-    fn move_cursor_left(&mut self) {
+    fn move_cursor_left(&mut self, is_shift_held: bool) {
+        self.update_selection(is_shift_held);
+
         if self.buffer.cursor_idx > 0 {
             self.buffer.cursor_idx -= 1;
         }
     }
 
-    fn move_cursor_up(&mut self) {
+    fn move_cursor_up(&mut self, is_shift_held: bool) {
+        self.update_selection(is_shift_held);
+
         let (init_visual_col, row) = self.get_visual_cursor_pos();
 
         if row != 0 {
@@ -195,7 +234,9 @@ impl View {
         }
     }
 
-    fn move_cursor_down(&mut self) {
+    fn move_cursor_down(&mut self, is_shift_held: bool) {
+        self.update_selection(is_shift_held);
+
         let (init_visual_col, row) = self.get_visual_cursor_pos();
 
         if row != self.buffer.text.len_lines() - 1 {
@@ -254,10 +295,17 @@ impl View {
     pub fn save(&self) -> Result<(), String> {
         match &self.file_path {
             Some(path) => {
-                let mut file = match File::create(path) {
-					Ok(f) => f,
-					Err(_) => return Err(String::from("Error: File could not be opened for writing.")),
-				};
+                let mut file = match OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(path)
+                {
+                    Ok(f) => f,
+                    Err(_) => {
+                        return Err(String::from("Error: File could not be opened for writing."));
+                    }
+                };
                 for chunk in self.buffer.text.chunks() {
                     file.write_all(chunk.as_bytes()).unwrap();
                 }

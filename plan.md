@@ -1,3 +1,5 @@
+TODO: Fix VisualBox::draw's idiotic line_col argument.
+
 > User will input command, either via the command prompt (with all arguments
 included) or with a keypress (which then prompts the user for the arguments).
 
@@ -10,17 +12,17 @@ the command. Failure is then reported back to the user.
 
 - previous_tab
 
-- move_focus_left
+- focus_tab tab_idx
 
-- move_focus_right
-
-- move_focus_up
-
-- move_focus_down
+- (m)ove_focus [(l)eft|(r)ight|(u)p|(d)own]
 
 - quit
 
-- save [filename]
+- close
+
+Like `quit`, but only closes a single file.
+
+- save [filename] [!]
 
 If `filename` is present, create/overwrite the corresponding file and fill it with the contents of the currently focused view. Overwriting should fail with a warning if the given file path does not match the path in the currently focused view, unless the command ends in '!'.
 
@@ -28,6 +30,12 @@ If `filename` is not present, save to the filepath of the currently focused view
 
 - open filename
 
-- vsplit filename
+Opens the given file in a new tab, and switches the focus to this new tab.
 
-- hsplit filename
+- vsplit filename [l|r]
+
+Opens the given file in a vertical split - that is, one file next to the other. The opened view will open to the (l)eft or (r)ight of the current window. Default is right.
+
+- hsplit filename [u|d]
+
+Opens the given file in a horizontal split - that is, one file above the other. The opened view will open above (u) or below (d) of the current window. Default is below.

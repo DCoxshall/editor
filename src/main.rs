@@ -33,7 +33,7 @@ fn main() -> Result<()> {
         if event.is_resize() {
             terminal.resize();
         } else {
-            editor.handle_input(event, &terminal);
+            editor.handle_input(event);
         }
         if editor.quit {
             break;

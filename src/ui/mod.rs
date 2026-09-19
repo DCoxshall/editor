@@ -3,6 +3,8 @@ pub mod view_bounds;
 pub mod visual_box;
 
 use ui_descriptor::UiDescriptor;
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 use view_bounds::ViewBounds;
 use visual_box::VisualBox;
 
@@ -13,6 +15,7 @@ use crate::{
         view::View,
     },
     terminal::Terminal,
+    ui::visual_box::reset_style,
 };
 
 use crossterm::style::{Attributes, Color, ContentStyle};
@@ -20,7 +23,7 @@ use crossterm::style::{Attributes, Color, ContentStyle};
 pub fn render(editor: &Editor, term: &mut Terminal) {
     term.hide_cursor();
 
-    let (width, height) = term.size();
+    let (width, height) = Terminal::size();
     let current_tab = editor.get_current_tab();
 
     let descriptor = UiDescriptor::from_tab(current_tab, width, height - 1);
@@ -65,32 +68,44 @@ fn render_view_with_bounds(
     if bounds.height < 1 || bounds.width < 1 {
         return;
     }
+    // The visual X and Y coordinates of the grapheme we're currently rendering.
+    let mut visual_x: usize;
+    let mut visual_y: usize = 0;
 
-    let visual_box_height = bounds.height - 1;
-    let mut view_vb = VisualBox::new(bounds.width, visual_box_height);
-    let view_line_count = view.buffer.text.len_lines();
+    // We leave a line free for the status bar.
+    let mut view_vb = VisualBox::new(bounds.width, bounds.height - 1);
 
-    // We need to leave one line free for this view's status bar.
-    for visual_line_idx in 0..(visual_box_height) {
-        let file_line_idx = visual_line_idx + view.start_row;
-        if file_line_idx < view_line_count {
-            let line_text: String = view
-                .buffer
-                .text
-                .line(file_line_idx)
-                .to_string()
-                .chars()
-                .skip(view.start_col)
-                .collect();
-            view_vb.draw(0, visual_line_idx, &line_text, view.start_col);
-        } else {
-            view_vb.draw(
-                0,
-                visual_line_idx,
-                View::EMPTY_LINE_NOTATION,
-                view.start_col,
-            );
+    let lines = view.buffer.text.lines();
+
+    let relevant_lines = lines.skip(view.start_row);
+
+    for line in relevant_lines {
+        visual_x = 0;
+        let mut text = line.to_string();
+        if text.ends_with('\n') {
+            text.pop();
         }
+        if text.ends_with('\r') {
+            text.pop();
+        }
+        let graphemes = text.graphemes(true);
+        for g in graphemes {
+            view_vb.draw_grapheme(visual_x, visual_y, g, 0, reset_style());
+            visual_x += g.width_cjk();
+            if visual_x >= view_vb.width {
+                break;
+            }
+        }
+        visual_y += 1;
+        if visual_y >= view_vb.height {
+            break;
+        }
+    }
+
+    // Fill in the rest of the visual box (if there is a "rest") with '~'.
+    while visual_y < view_vb.height {
+        view_vb.draw_grapheme(0, visual_y, View::EMPTY_LINE_NOTATION, 0, reset_style());
+        visual_y += 1;
     }
 
     render_view_status_bar(
@@ -126,7 +141,13 @@ fn render_view_status_bar(
     let mut status_bar_text = String::new();
 
     match &view.file_path {
-        Some(path) => status_bar_text.push_str(path.to_str().unwrap()),
+        Some(path) => {
+            // Add a * before the filename if it's been edited and not saved.
+            if view.dirty {
+                status_bar_text.push('*');
+            }
+            status_bar_text.push_str(path.to_str().unwrap())
+        }
         None => {}
     }
 
@@ -155,6 +176,7 @@ fn render_view_status_bar(
 fn render_command_bar(editor: &Editor, term: &mut Terminal, x: usize, y: usize, width: usize) {
     let mut command_input_vb = VisualBox::new(width, 1);
 
+    // First, we draw the text entered by the user.
     let mut prompt_start = match &editor.mode {
         Mode::Command => String::from(">> "),
         Mode::Edit => String::from("#> "),
@@ -163,14 +185,24 @@ fn render_command_bar(editor: &Editor, term: &mut Terminal, x: usize, y: usize, 
     prompt_start.push_str(&editor.command_bar.view.buffer.text.to_string());
     command_input_vb.draw(0, 0, &prompt_start, 0);
 
+    // Next, we draw the tab tracker. This is so the tab tracker renders in front of the prompt, should the prompt be too long.
+    let mut tab_tracker = String::from("");
+
+    for i in 0..editor.tabs.len() {
+        if i == editor.focused_tab_idx {
+            tab_tracker.push('[');
+            tab_tracker.push_str(&(i + 1).to_string());
+            tab_tracker.push(']');
+        } else {
+            tab_tracker.push_str(&(i + 1).to_string());
+        }
+    }
+
+    let tab_tracker_x_coord = width - tab_tracker.len();
+    command_input_vb.draw(tab_tracker_x_coord, 0, &tab_tracker, 0);
+
     term.draw_visual_box(x, y, command_input_vb);
 }
-
-// fn render_prompt(prompt_text: String, term: &mut Terminal, width: usize, height: usize) {
-//     let mut prompt_vb = VisualBox::new(width, 1);
-//     prompt_vb.draw(0, 0, &prompt_text, 0);
-//     term.draw_visual_box(0, height - 2, prompt_vb);
-// }
 
 fn get_visual_cursor_pos(
     editor: &Editor,
