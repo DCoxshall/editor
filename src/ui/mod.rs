@@ -75,7 +75,7 @@ fn render_view_with_bounds(
     // We leave a line free for the status bar.
     let mut view_vb = VisualBox::new(bounds.width, bounds.height - 1);
 
-    let lines = view.buffer.text.lines();
+    let lines = view.buffer.get_text_as_rope().lines();
 
     let relevant_lines = lines.skip(view.start_row);
 
@@ -182,7 +182,7 @@ fn render_command_bar(editor: &Editor, term: &mut Terminal, x: usize, y: usize, 
         Mode::Edit => String::from("#> "),
     };
 
-    prompt_start.push_str(&editor.command_bar.view.buffer.text.to_string());
+    prompt_start.push_str(&editor.command_bar.view.buffer.get_text_as_string());
     command_input_vb.draw(0, 0, &prompt_start, 0);
 
     // Next, we draw the tab tracker. This is so the tab tracker renders in front of the prompt, should the prompt be too long.
@@ -215,7 +215,7 @@ fn get_visual_cursor_pos(
             for bound in &ui_descriptor.views {
                 if bound.path == tab.focused_view_path {
                     let view = tab.get_current_focused_view();
-                    let (abs_x, abs_y) = view.get_visual_cursor_pos();
+                    let (abs_x, abs_y) = view.buffer.get_logical_cursor_pos();
                     return (
                         bound.x + abs_x - view.start_col,
                         bound.y + abs_y - view.start_row,
@@ -229,7 +229,7 @@ fn get_visual_cursor_pos(
         }
         Mode::Command => {
             let view = &editor.command_bar.view;
-            let (cursor_x, cursor_y) = view.get_visual_cursor_pos();
+            let (cursor_x, cursor_y) = view.buffer.get_logical_cursor_pos();
             return (
                 cursor_x + 3 - view.start_col,
                 cursor_y + height - 1 - view.start_row,

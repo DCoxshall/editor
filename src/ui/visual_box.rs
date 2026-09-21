@@ -2,6 +2,7 @@ use crossterm::style::Color;
 use crossterm::style::{Attributes, ContentStyle};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
+use crate::editor::buffer::grapheme_visual_width;
 
 use crate::editor::view::View;
 
@@ -90,7 +91,7 @@ impl VisualBox {
             return;
         }
 
-        let width = UnicodeWidthStr::width(grapheme);
+        let width = grapheme_visual_width(grapheme);
 
         // Combine zero-width graphemes with the previous grapheme.
         if width == 0 {
@@ -110,7 +111,8 @@ impl VisualBox {
 
         // Write the grapheme to self.cells.
         let i = self.index(x, y);
-        self.cells[i].cell = Cell::Grapheme(grapheme.to_string());
+        let grapheme_string = grapheme.to_string();
+        self.cells[i].cell = Cell::Grapheme(grapheme_string);
         self.cells[i].style = style;
         for dx in 1..width {
             self.cells[i + dx].cell = Cell::Continuation;

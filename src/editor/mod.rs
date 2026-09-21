@@ -1,12 +1,12 @@
-mod buffer;
+pub mod buffer;
+mod selection;
 pub mod tab;
 pub mod view;
-mod selection;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use std::path::PathBuf;
 
-use crate::{command::Command, editor::{selection::Selection, view::View}};
+use crate::{command::Command, editor::view::View};
 use crate::{command::command_bar::CommandBar, editor::tab::Tab};
 
 #[derive(PartialEq)]
@@ -35,10 +35,10 @@ pub struct Editor {
 
 impl Editor {
     /// MOD_KEY_1 is used for movement and windowing commands.
-    const MOD_KEY_1: KeyModifiers = KeyModifiers::CONTROL;
+    pub const MOD_KEY_1: KeyModifiers = KeyModifiers::CONTROL;
 
     /// MOD_KEY_2 is used for editor commands - saving, finding etc.
-    const MOD_KEY_2: KeyModifiers = KeyModifiers::ALT;
+    pub const MOD_KEY_2: KeyModifiers = KeyModifiers::ALT;
 
     /// Creates a new editor from a Vector of relative file paths. If any of the files can't be
     /// opened, this is reported in the status bar and no view is created, unless no file can be
@@ -145,21 +145,6 @@ impl Editor {
                     // Typing Ctrl-S is equivalent to running the `save` command (with no
                     // arguments).
                     Command::save(self, None, false);
-                }
-
-                KeyCode::Home => {
-                    self.get_current_tab_mut()
-                        .get_current_focused_view_mut()
-                        .buffer
-                        .cursor_idx = 0;
-                }
-
-                KeyCode::End => {
-                    let buffer = &mut self
-                        .get_current_tab_mut()
-                        .get_current_focused_view_mut()
-                        .buffer;
-                    buffer.cursor_idx = buffer.text.len_chars();
                 }
 
                 _ => {

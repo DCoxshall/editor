@@ -250,7 +250,7 @@ impl CommandBar {
 
     /// Gets the raw textual contents of the command bar's internal view.
     pub fn get_contents(&self) -> String {
-        return self.view.buffer.text.to_string();
+        return self.view.buffer.get_text_as_string();
     }
 
     /// Handles a keystroke. If the command bar struct itself cannot handle the keystroke, pass the

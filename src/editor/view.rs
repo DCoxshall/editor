@@ -4,9 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use unicode_width::UnicodeWidthChar;
-
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::editor::{Editor, buffer::Buffer, selection::Selection};
 
@@ -32,8 +30,6 @@ pub struct View {
 
     /// Represents whether this view has been edited since it was last saved to disk.
     pub dirty: bool,
-
-    pub selection: Selection,
 }
 
 impl View {
@@ -57,7 +53,6 @@ impl View {
             start_row: 0,
             start_col: 0,
             dirty: false,
-            selection: Selection::new(),
         })
     }
 
@@ -70,76 +65,11 @@ impl View {
             start_col: 0,
             has_status_bar: true,
             dirty: false,
-            selection: Selection::new(),
         }
-    }
-
-    /// Get the logical length of the line. For example, the line "a文<tab>" would have a
-    /// logical length of 3.
-    fn logical_line_len(&self, line_idx: usize) -> usize {
-        let line = self.buffer.text.line(line_idx);
-        if line.to_string().ends_with('\n') {
-            return line.len_chars() - 1;
-        } else if line.to_string().ends_with("\r\n") {
-            return line.len_chars() - 2;
-        }
-        return line.len_chars();
-    }
-
-    /// Returns the visual length of the string. Only counts the first line of the
-    /// string i.e. "abc\ndef" is of length 3.
-    fn visual_str_len(&self, string: &str) -> usize {
-        let mut len = 0;
-        for c in string.chars() {
-            if c == '\t' {
-                let diff = len % Self::TAB_WIDTH;
-                if diff == 0 {
-                    len += 4;
-                } else {
-                    len += 4 - diff;
-                }
-            } else if c == '\n' || c == '\r' {
-                return len;
-            } else {
-                len += c.width_cjk().unwrap(); // There should never be a control character in a string.
-            }
-        }
-        len
-    }
-
-    /// Get the visual length of the line. For example, the line "a文文<tab>" would have a
-    /// visual length of 8, assuming a tab width of 4.
-    /// Tabs take up as much space as necessary to reach the next multiple of
-    /// Self::TAB_WIDTH. Hence, 'a' has width 1, '文文' has width 4, and <tab> has width
-    /// 3, for a total of 8. This behaviour is based on VSCode's tab insertion behaviour.
-    fn visual_line_len(&self, line_idx: usize) -> usize {
-        let line = self.buffer.text.line(line_idx).to_string();
-        self.visual_str_len(&line)
     }
 
     pub fn handle_keystroke(&mut self, key_event: KeyEvent) {
-        let is_shift_held = key_event.modifiers.contains(KeyModifiers::SHIFT);
         match key_event.code {
-            KeyCode::Left => {
-                self.move_cursor_left(is_shift_held);
-            }
-            KeyCode::Right => {
-                self.move_cursor_right(is_shift_held);
-            }
-            KeyCode::Up => {
-                self.move_cursor_up(is_shift_held);
-            }
-            KeyCode::Down => {
-                self.move_cursor_down(is_shift_held);
-            }
-
-            KeyCode::End => {
-                self.move_to_end(is_shift_held);
-            }
-            KeyCode::Home => {
-                self.move_to_home(is_shift_held);
-            }
-
             KeyCode::Char(c) => {
                 // We should only be inserting characters if no key modifiers are pressed.
                 if !(key_event.modifiers.contains(Editor::MOD_KEY_1)
@@ -169,105 +99,8 @@ impl View {
             }
 
             // Couldn't match at editor level, tab level, or here, so disregard.
-            _ => {}
+            _ => self.buffer.handle_keystroke(key_event),
         }
-    }
-
-    fn update_selection(&mut self, is_shift_held: bool) {
-        if is_shift_held {
-            if !self.selection.active {
-                self.selection.active = true;
-                self.selection.anchor = self.buffer.cursor_idx;
-            }
-        } else {
-            self.selection.active = false;
-        }
-    }
-
-    fn move_to_end(&mut self, is_shift_held: bool) {
-        self.update_selection(is_shift_held);
-
-        let (_, row) = self.get_visual_cursor_pos();
-        let line_char_idx = self.buffer.text.line_to_char(row);
-        let curr_line_len = self.logical_line_len(row);
-        self.buffer.cursor_idx = line_char_idx + curr_line_len;
-    }
-
-    fn move_to_home(&mut self, is_shift_held: bool) {
-        self.update_selection(is_shift_held);
-        
-        let curr_line_idx = self.buffer.text.char_to_line(self.buffer.cursor_idx);
-        let cur_line_char_idx = self.buffer.text.line_to_char(curr_line_idx);
-        self.buffer.cursor_idx = cur_line_char_idx;
-    }
-
-    fn move_cursor_right(&mut self, is_shift_held: bool) {
-        self.update_selection(is_shift_held);
-
-        if self.buffer.cursor_idx != self.buffer.text.len_chars() {
-            self.buffer.cursor_idx += 1;
-        }
-    }
-
-    fn move_cursor_left(&mut self, is_shift_held: bool) {
-        self.update_selection(is_shift_held);
-
-        if self.buffer.cursor_idx > 0 {
-            self.buffer.cursor_idx -= 1;
-        }
-    }
-
-    fn move_cursor_up(&mut self, is_shift_held: bool) {
-        self.update_selection(is_shift_held);
-
-        let (init_visual_col, row) = self.get_visual_cursor_pos();
-
-        if row != 0 {
-            self.buffer.cursor_idx = self.buffer.text.line_to_char(row - 1);
-            let (mut curr_visual_col, _) = self.get_visual_cursor_pos();
-            while curr_visual_col < init_visual_col
-                && curr_visual_col < self.visual_line_len(row - 1)
-            {
-                self.buffer.cursor_idx += 1;
-                (curr_visual_col, _) = self.get_visual_cursor_pos();
-            }
-        }
-    }
-
-    fn move_cursor_down(&mut self, is_shift_held: bool) {
-        self.update_selection(is_shift_held);
-
-        let (init_visual_col, row) = self.get_visual_cursor_pos();
-
-        if row != self.buffer.text.len_lines() - 1 {
-            self.buffer.cursor_idx = self.buffer.text.line_to_char(row + 1);
-            let (mut curr_visual_col, _) = self.get_visual_cursor_pos();
-            while curr_visual_col < init_visual_col
-                && curr_visual_col < self.visual_line_len(row + 1)
-            {
-                self.buffer.cursor_idx += 1;
-                (curr_visual_col, _) = self.get_visual_cursor_pos();
-            }
-        }
-    }
-
-    /// Returns the location of the cursor relative to the start of the buffer.
-    fn get_logical_cursor_pos(&self) -> (usize, usize) {
-        let line = self.buffer.text.char_to_line(self.buffer.cursor_idx);
-        let col = self.buffer.cursor_idx - self.buffer.text.line_to_char(line);
-        (col, line)
-    }
-
-    /// Returns the visual position of the cursor relative to the start of the buffer.
-    pub fn get_visual_cursor_pos(&self) -> (usize, usize) {
-        let (logical_cursor_x, line_idx) = self.get_logical_cursor_pos();
-        let line = self
-            .buffer
-            .text
-            .line(line_idx)
-            .slice(..logical_cursor_x)
-            .to_string();
-        (self.visual_str_len(&line), line_idx)
     }
 
     /// Adjust `self.start_row` and `self.start_col` to ensure the cursor is within the
@@ -277,7 +110,7 @@ impl View {
         // View, not the height of the actual viewport.
         let view_height = height - 1;
 
-        let (cursor_x, cursor_y) = self.get_logical_cursor_pos();
+        let (cursor_x, cursor_y) = self.buffer.get_logical_cursor_pos();
         if self.start_col + width <= cursor_x {
             self.start_col = cursor_x - width + 1;
         }
@@ -306,8 +139,13 @@ impl View {
                         return Err(String::from("Error: File could not be opened for writing."));
                     }
                 };
-                for chunk in self.buffer.text.chunks() {
-                    file.write_all(chunk.as_bytes()).unwrap();
+                match write!(file, "{}", self.buffer.get_text_as_string()) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        return Err(
+                            "Error: File was opened but could not be written to.".to_string()
+                        );
+                    }
                 }
 
                 Ok(())
