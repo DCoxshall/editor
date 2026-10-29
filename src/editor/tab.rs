@@ -87,16 +87,16 @@ impl Tab {
     pub fn handle_keystroke(&mut self, key_event: KeyEvent) {
         if key_event.modifiers.contains(Editor::MOD_KEY_2) {
             match key_event.code {
-                KeyCode::Up => {
+                KeyCode::Char('w') => {
                     self.move_focus_direction(Direction::Up);
                 }
-                KeyCode::Down => {
+                KeyCode::Char('s') => {
                     self.move_focus_direction(Direction::Down);
                 }
-                KeyCode::Left => {
+                KeyCode::Char('a') => {
                     self.move_focus_direction(Direction::Left);
                 }
-                KeyCode::Right => {
+                KeyCode::Char('d') => {
                     self.move_focus_direction(Direction::Right);
                 }
                 _ => {
